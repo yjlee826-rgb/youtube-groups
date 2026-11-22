@@ -255,7 +255,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-24c';
+const VER = '2026-11-24d';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -273,7 +273,7 @@ fixH(); addEventListener('orientationchange', () => setTimeout(fixH, 300)); addE
 // 새 버전이 올라오면 스스로 다시 불러옴 (캐시 우회)
 let verAt = 0;
 function checkVer() {
-  if (Date.now() - verAt < 60000) return; verAt = Date.now();
+  if (Date.now() - verAt < 3000) return; verAt = Date.now();   // 앱을 열거나 다시 띄울 때마다 확인 (연달아 두 번 확인하는 것만 막음)
   fetch(location.pathname + '?check=' + Date.now(), { cache: 'no-store' }).then(r => r.text()).then(t => {
     const v = (t.match(/const VER = '([^']+)'/) || [])[1];
     // 같은 버전으로는 한 번만 다시 불러옴 (서버가 예전 파일을 줄 때 무한 반복 방지)
