@@ -1,5 +1,10 @@
-// 다락에서 채널·영상·곡을 누르면 새 탭을 만들지 않고 옆의 유튜브 탭을 그 주소로 바꿈
+// 다락 확장 프로그램은 '틀'만 맡고, 화면과 기능은 모두 인터넷의 다락 앱에서 불러옴
+// → 다락 앱이 바뀌면 확장 프로그램을 다시 설치하지 않아도 자동으로 새 버전이 보임
 const APP = 'https://yjlee826-rgb.github.io';
+const VER = chrome.runtime.getManifest().version;
+const frame = document.getElementById('app');
+// 앱에 확장 프로그램 버전을 알려 줌 (틀 자체를 바꿔야 할 드문 경우 앱이 안내하도록)
+frame.addEventListener('load', () => frame.contentWindow.postMessage({ dl: 'ext', v: VER }, APP));
 const hostOf = u => { try { return new URL(u).host; } catch { return ''; } };
 addEventListener('message', async e => {
   if (e.origin !== APP || e.data?.dl !== 'open') return;
