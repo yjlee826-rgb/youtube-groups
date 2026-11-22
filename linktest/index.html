@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="링크 시험">
+<link rel="manifest" href="manifest.json">
+<title>YouTube 링크 시험</title>
+<style>
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#121212);--ink:light-dark(#111,#eee);--sub:light-dark(#555,#aaa);--line:light-dark(#ddd,#333);--btn:light-dark(#f2f2f2,#1f1f1f)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;padding:20px max(4vw,16px) 40px}
+h1{font-size:22px;margin:0 0 6px}
+p.lead{color:var(--sub);margin:0 0 18px;font-size:15px}
+#env{font-size:14px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:22px}
+h2{font-size:17px;margin:26px 0 10px}
+a.t{display:block;text-decoration:none;color:inherit;background:var(--btn);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;min-height:44px}
+a.t b{display:block;font-size:17px}
+a.t span{display:block;font-size:13px;color:var(--sub);word-break:break-all}
+</style>
+</head>
+<body>
+<h1>YouTube 링크 시험</h1>
+<p class="lead">이 페이지를 홈 화면에 추가한 뒤, 홈 화면 아이콘으로 열어서 아래 버튼을 하나씩 눌러 보세요. 시험 채널은 ColorScale입니다.</p>
+<div id="env"></div>
+
+<h2>모든 기기 공통</h2>
+<a class="t" href="https://www.youtube.com/@ColorScale/videos"><b>1번 · 일반 주소, 동영상 탭</b><span>https://www.youtube.com/@ColorScale/videos</span></a>
+<a class="t" href="https://www.youtube.com/@ColorScale/videos" target="_blank" rel="noopener"><b>2번 · 일반 주소, 새 창으로 열기</b><span>https://www.youtube.com/@ColorScale/videos</span></a>
+
+<h2>아이폰용</h2>
+<a class="t" href="youtube://www.youtube.com/@ColorScale/videos"><b>3번 · youtube:// 주소, 동영상 탭</b><span>youtube://www.youtube.com/@ColorScale/videos</span></a>
+<a class="t" href="vnd.youtube://www.youtube.com/@ColorScale/videos"><b>4번 · vnd.youtube:// 주소, 동영상 탭</b><span>vnd.youtube://www.youtube.com/@ColorScale/videos</span></a>
+<a class="t" href="youtube://www.youtube.com/@ColorScale"><b>5번 · youtube:// 주소, 채널 첫 화면</b><span>youtube://www.youtube.com/@ColorScale</span></a>
+
+<h2>안드로이드용 (갤럭시 폴드·탭)</h2>
+<a class="t" href="intent://www.youtube.com/@ColorScale/videos#Intent;scheme=https;package=com.google.android.youtube;S.browser_fallback_url=https%3A%2F%2Fwww.youtube.com%2F%40ColorScale%2Fvideos;end"><b>6번 · 안드로이드 앱 지정 주소, 동영상 탭</b><span>intent://www.youtube.com/@ColorScale/videos (YouTube 앱 지정)</span></a>
+<a class="t" href="vnd.youtube://www.youtube.com/@ColorScale/videos"><b>7번 · vnd.youtube:// 주소, 동영상 탭</b><span>vnd.youtube://www.youtube.com/@ColorScale/videos</span></a>
+
+<h2>YouTube Music 재생목록 (모든 기기)</h2>
+<p class="lead">아래 칸에 본인 재생목록 주소를 붙여 넣으면 8~10번 링크가 그 재생목록으로 바뀝니다. 비워 두면 YouTube Music의 보관함 재생목록 화면으로 연결됩니다.</p>
+<input id="pl" type="url" inputmode="url" placeholder="재생목록 주소 붙여 넣기 (list=로 시작하는 값 포함)" style="width:100%;font-size:16px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--btn);color:var(--ink);margin-bottom:12px">
+<a class="t" id="m8" href="https://music.youtube.com/library/playlists"><b>8번 · 일반 YouTube Music 주소</b><span id="s8">https://music.youtube.com/library/playlists</span></a>
+<a class="t" id="m9" href="youtubemusic://music.youtube.com/library/playlists"><b>9번 · 아이폰용 youtubemusic:// 주소</b><span id="s9">youtubemusic://music.youtube.com/library/playlists</span></a>
+<a class="t" id="m10" href="intent://music.youtube.com/library/playlists#Intent;scheme=https;package=com.google.android.apps.youtube.music;end"><b>10번 · 안드로이드용 YouTube Music 앱 지정 주소</b><span id="s10">intent://music.youtube.com/library/playlists (YouTube Music 앱 지정)</span></a>
+
+<script>
+{
+  const pl = document.getElementById('pl');
+  const set = (id, href, label) => { document.getElementById('m' + id).href = href; document.getElementById('s' + id).textContent = label; };
+  pl.addEventListener('input', () => {
+    const m = pl.value.match(/[?&]list=([A-Za-z0-9_-]+)/) || pl.value.trim().match(/^([A-Za-z0-9_-]{10,})$/);
+    const path = m ? 'music.youtube.com/playlist?list=' + m[1] : 'music.youtube.com/library/playlists';
+    set(8, 'https://' + path, 'https://' + path);
+    set(9, 'youtubemusic://' + path, 'youtubemusic://' + path);
+    set(10, 'intent://' + path + '#Intent;scheme=https;package=com.google.android.apps.youtube.music;end', 'intent://' + path + ' (YouTube Music 앱 지정)');
+  });
+}
+</script>
+<script>
+{
+  const ua = navigator.userAgent;
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const os = /iPhone|iPad|iPod/.test(ua) ? '아이폰/아이패드' : /Android/.test(ua) ? '안드로이드' : 'PC 또는 기타';
+  document.getElementById('env').textContent =
+    '지금 환경: ' + os + ' · ' + (standalone ? '홈 화면 앱으로 실행 중 (정상)' : '브라우저 안에서 실행 중 — 홈 화면에 추가한 뒤 아이콘으로 다시 열어 주세요');
+}
+</script>
+</body>
+</html>
