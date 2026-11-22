@@ -100,6 +100,25 @@ a{color:inherit;text-decoration:none}
 .rtabs .on{opacity:1;color:#F3ECE4;border-bottom-color:var(--gold)}
 .pthumb{width:96px;height:54px;border-radius:8px;background:var(--thumb) center/cover;flex:none}
 button.sec{width:100%;text-align:left}
+.thumb .nd{position:absolute;top:8px;right:8px;width:11px;height:11px;border-radius:6px;background:var(--gold);box-shadow:0 0 0 2px rgba(0,0,0,.35)}
+.pthumb{position:relative}
+.pthumb .nd{position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:5px;background:var(--gold);box-shadow:0 0 0 2px rgba(0,0,0,.35)}
+.seen .pthumb,.seen .thumb{opacity:.55}
+.pin{display:inline-block;width:14px;height:14px;margin-right:4px;vertical-align:-1px;fill:var(--gold)}
+.srch{flex:1;min-width:0;height:44px;border-radius:12px;border:0;background:rgba(255,255,255,.14);color:#F3ECE4;font:inherit;font-size:16px;padding:0 14px;outline:none}
+.srch::placeholder{color:var(--onbur)}
+.ichk{width:24px;height:24px;border-radius:12px;border:2px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center}
+.ichk svg{width:14px;height:14px;stroke:var(--gold-ink);stroke-width:3;fill:none;display:none}
+.on .ichk{background:var(--gold);border-color:var(--gold)}.on .ichk svg{display:block}
+.paste{height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--line);font-size:14px;color:var(--sub);align-self:flex-end;margin-top:-4px}
+.deck{display:flex;flex-direction:column;height:100%}
+.cols{flex:1;display:flex;gap:12px;overflow-x:auto;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px);scroll-snap-type:x proximity}
+.dcol{flex:none;width:330px;display:flex;flex-direction:column;background:var(--panel);border-radius:14px;overflow:hidden;scroll-snap-align:start}
+.dh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 16px;min-height:52px;font-size:16px;font-weight:700;border-bottom:1px solid var(--line);text-align:left}
+.dl{flex:1;overflow-y:auto}
+.drow{display:flex;gap:10px;padding:10px 12px;width:100%;text-align:left;-webkit-touch-callout:none;user-select:none}
+.drow .thumb{width:120px;flex:none;border-radius:8px}
+.drow .vt{font-size:14px}.drow .vs{font-size:13px}
 /* 태블릿 */
 .wide{display:none}
 @media (min-width:900px){
@@ -132,7 +151,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23c';
+const VER = '2026-11-23d';
 // 아이폰 홈 화면 앱에서 화면 높이가 상태 표시줄만큼 짧게 잡히는 문제 보정
 const fixH = () => { const st = document.documentElement.style; navigator.standalone && matchMedia('(orientation: portrait)').matches ? st.setProperty('--app-h', screen.height + 'px') : st.removeProperty('--app-h'); };
 fixH(); addEventListener('orientationchange', () => setTimeout(fixH, 300)); addEventListener('resize', fixH);
@@ -165,7 +184,8 @@ const ic = {
   more: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>',
   up: '<svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
-  chk: '<svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>'
+  chk: '<svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>',
+  find: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>'
 };
 
 let token = null, tokenExp = 0, client = null;
@@ -173,7 +193,7 @@ let subs = load('subs', []);
 let extra = load('extra', {});
 let stats = load('stats', {});
 let pls = load('pls', []);
-let plItems = {};
+let plItems = {}, tsel = new Set();
 let latest = load('latest', {});
 let data = load('data', null);
 let fileId = load('fileId', null);
@@ -201,12 +221,18 @@ const toast = (m, act, fn) => {
 
 const subIds = () => new Set(subs.map(s => s.id));
 const subOf = id => subs.find(s => s.id === id) || (extra[id] && { ...extra[id], off: true });
-const isNew = id => { const l = latest[id]; return !!(l && l.t > (data.seen[id] ?? data.since)); };
+// 채널마다 최근 영상 10개(쇼츠·라이브 포함)를 들고 있고, 영상 하나하나에 봤음 표시를 함
+const vidsOf = id => { const l = latest[id]; return l?.items || (l?.vid ? [{ vid: l.vid, title: l.title, thumb: l.thumb, t: l.t }] : []); };
+const isNewV = (ch, v) => v.t > (data.seen[ch] ?? data.since) && !data.watched[v.vid];
+const newVids = id => vidsOf(id).filter(v => isNewV(id, v));
+const isNew = id => newVids(id).length > 0;
+const feedOf = list => list.flatMap(s => vidsOf(s.id).map(v => ({ ...v, ch: s.id, chTitle: s.title }))).sort((a, b) => b.t - a.t);
+const curGroup = () => data.groups.find(x => x.id === (view.name === 'group' ? view.id : view.wg));
 const grouped = () => { const s = new Set(); data.groups.forEach(g => g.ch.forEach(c => s.add(c))); return s; };
 const unsorted = () => { const g = grouped(); return subs.filter(s => !g.has(s.id)); };
 const chOf = g => g.ch.map(subOf).filter(Boolean);
 const known = () => { const ids = subIds(); return subs.concat([...grouped()].filter(c => !ids.has(c) && extra[c]).map(subOf)); };
-const newCount = list => list.filter(s => isNew(s.id)).length;
+const newCount = list => list.reduce((a, s) => a + newVids(s.id).length, 0);
 
 function sortGroups(list) {
   const m = data.sort.groups;
@@ -222,6 +248,8 @@ function sortChannels(list, g) {
   if (m === 'name') a.sort((x, y) => x.title.localeCompare(y.title, 'ko'));
   else if (m === 'recent') a.sort((x, y) => (latest[y.id]?.t || 0) - (latest[x.id]?.t || 0));
   else if (g) a.sort((x, y) => g.ch.indexOf(x.id) - g.ch.indexOf(y.id));
+  const pin = g?.pin || [];   // 고정한 채널은 정렬과 상관없이 맨 위
+  if (pin.length) a.sort((x, y) => (pin.includes(x.id) ? pin.indexOf(x.id) : 1e9) - (pin.includes(y.id) ? pin.indexOf(y.id) : 1e9));
   return a;
 }
 
@@ -255,12 +283,13 @@ async function api(url, opt = {}, retry = true) {
 /* ---------- 드라이브 ---------- */
 // base: 마지막으로 맞춘 드라이브 파일의 시각 · dirty: 아직 안 올라간 변경 (1 = 본 표시만, 2 = 그룹·정렬 등)
 let base = load('base', 0), dirty = load('dirty', 0), syncedAt = 0, fullAt = 0;
-const norm = d => { d.groups ||= []; d.seen ||= {}; d.since ||= Date.now(); d.sort ||= {}; d.sort.groups ||= 'manual'; d.sort.channels ||= 'recent'; d.pl ||= { groups: [] }; d.pl.groups ||= []; return d; };
+const norm = d => { d.groups ||= []; d.seen ||= {}; d.watched ||= {}; for (const k in d.watched) if (Date.now() - d.watched[k] > 90 * 86400000) delete d.watched[k]; d.since ||= Date.now(); d.sort ||= {}; d.sort.groups ||= 'manual'; d.sort.channels ||= 'recent'; d.pl ||= { groups: [] }; d.pl.groups ||= []; return d; };
 // 다른 기기에서 바뀐 내용과 합침: 본 표시는 채널별로 더 최근 것, 그룹은 이 기기에서 고친 게 없으면 드라이브 것
 function merge(remote) {
   const seen = { ...remote.seen };
   for (const k in data.seen) if ((data.seen[k] || 0) > (seen[k] || 0)) seen[k] = data.seen[k];
-  if (dirty < 2) data = { ...remote, seen }; else data.seen = seen;
+  const watched = { ...remote.watched, ...data.watched };
+  if (dirty < 2) data = { ...remote, seen, watched }; else { data.seen = seen; data.watched = watched; }
   norm(data);
 }
 async function driveLoad() {
@@ -273,12 +302,41 @@ async function driveLoad() {
   try { const r = await api(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`); return r && r.updated ? norm(r) : null; }   // 비었거나 깨진 파일은 없는 것으로 봄
   catch (e) { if (e === 404) { fileId = null; keep('fileId', null); return driveLoad(); } throw e; }
 }
+// 백업: 그룹이 바뀔 때 직전 상태를 30분에 한 번씩 드라이브에 따로 남기고, 최근 20개만 둠
+let lastBackup = load('lastBackup', 0);
+const DRV = 'https://www.googleapis.com/drive/v3/files';
+async function backup(snap, force) {
+  if (!snap || (!force && Date.now() - lastBackup < 30 * 60000)) return;
+  lastBackup = Date.now(); keep('lastBackup', lastBackup);
+  const fd = new FormData();
+  fd.append('metadata', new Blob([JSON.stringify({ name: 'backup-' + Date.now() + '.json', parents: ['appDataFolder'] })], { type: 'application/json' }));
+  fd.append('file', new Blob([JSON.stringify(snap)], { type: 'application/json' }));
+  await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method: 'POST', body: fd });
+  const l = await backups();
+  for (const f of l.slice(20)) await api(`${DRV}/${f.id}`, { method: 'DELETE' }).catch(() => {});
+}
+const backups = async () => (await api(`${DRV}?spaces=appDataFolder&q=${encodeURIComponent("name contains 'backup-'")}&orderBy=createdTime desc&pageSize=100&fields=files(id,createdTime)`)).files;
+const when = t => new Intl.DateTimeFormat('ko', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(t));
+async function restoreDlg() {
+  let l; try { l = await backups(); } catch (e) { return e === 'auth' ? needAuth() : toast('백업을 불러오지 못했습니다'); }
+  if (!l.length) return toast('아직 백업이 없습니다');
+  choose('되돌릴 시점', l.map(f => [f.id, when(f.createdTime)]), '', async id => {
+    try {
+      const snap = norm(await api(`${DRV}/${id}?alt=media`));
+      choose(`${when(l.find(f => f.id === id).createdTime)} 상태로 되돌릴까요?`, [['y', `되돌리기 (그룹 ${snap.groups.length}개)`, 'danger']], '', async () => {
+        await backup(JSON.parse(JSON.stringify(data)), true).catch(() => {});   // 되돌리기 직전 상태도 남김
+        data.groups = snap.groups; data.pl = snap.pl; data.sort = snap.sort; save(); render(); toast('되돌렸습니다');
+      });
+    } catch (e) { e === 'auth' ? needAuth() : toast('백업을 열지 못했습니다'); }
+  });
+}
 let saveQ = Promise.resolve();
 const driveSave = () => saveQ = saveQ.catch(() => {}).then(doSave);
 async function doSave() {
   const remote = await driveLoad();
   if (remote && remote.updated === data.updated) { base = data.updated; dirty = 0; keep('base', base); keep('dirty', 0); return; }   // 이미 올라가 있음
   if (remote && (remote.updated || 0) !== base) merge(remote);                                                                      // 그사이 다른 기기가 고쳤으면 합침
+  if (remote && dirty >= 2) backup(remote).catch(() => {});                                                                          // 그룹을 바꾸기 전 상태를 남겨 둠
   const sent = data.updated = Date.now();
   keep('data', data);
   const body = JSON.stringify(data);
@@ -351,6 +409,13 @@ async function loadItems(pid, force) {
     out = out.concat(d.items.filter(i => i.snippet.thumbnails && Object.keys(i.snippet.thumbnails).length).map(i => ({ pi: i.id, pos: i.snippet.position, vid: i.contentDetails.videoId, title: i.snippet.title, ch: (i.snippet.videoOwnerChannelTitle || '').replace(/ - Topic$/, ''), thumb: i.snippet.thumbnails.medium?.url || i.snippet.thumbnails.default?.url || '' })));
     page = d.nextPageToken || '';
   } while (page);
+  // 곡 길이 (50곡에 1단위)
+  for (let i = 0; i < out.length; i += 50) {
+    try {
+      const d = await api('https://www.googleapis.com/youtube/v3/videos?part=contentDetails&maxResults=50&id=' + out.slice(i, i + 50).map(x => x.vid).join(','));
+      (d.items || []).forEach(v => { const m = v.contentDetails.duration.match(/P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/) || []; out.filter(x => x.vid === v.id).forEach(x => x.dur = (+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0)); });
+    } catch (e) { if (e === 'auth') throw e; }
+  }
   plItems[pid] = { at: Date.now(), items: out };
 }
 function showPl(pid) {
@@ -372,22 +437,23 @@ async function loadStats() {
 }
 let quotaHit = 0;
 async function latestOf(id) {
-  for (const p of ['UULF', 'UU']) {
-    try {
-      const d = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=1&playlistId=${p}${id.slice(2)}`);
-      const it = d.items?.[0];
-      if (it) return { t: Date.parse(it.contentDetails.videoPublishedAt || it.snippet.publishedAt), title: it.snippet.title, vid: it.contentDetails.videoId, thumb: it.snippet.thumbnails?.medium?.url || '', at: Date.now() };
-    } catch (e) {
-      if (e === 'auth') throw e;
-      if (e === 403) quotaHit = Date.now();
-      if (e !== 404) return null;   // 네트워크·한도 오류: 예전 값을 그대로 둠 (404만 '그 목록 없음')
-    }
+  // UU = 채널의 모든 업로드 (일반 영상·쇼츠·라이브 다시보기). 예정된 프리미어는 뺌
+  try {
+    const d = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=10&playlistId=UU${id.slice(2)}`);
+    const items = (d.items || []).filter(i => i.contentDetails.videoPublishedAt && Date.parse(i.contentDetails.videoPublishedAt) <= Date.now())
+      .map(i => ({ vid: i.contentDetails.videoId, title: i.snippet.title, thumb: i.snippet.thumbnails?.medium?.url || i.snippet.thumbnails?.default?.url || '', t: Date.parse(i.contentDetails.videoPublishedAt) }))
+      .sort((a, b) => b.t - a.t);
+    const f = items[0];
+    return f ? { t: f.t, title: f.title, vid: f.vid, thumb: f.thumb, items, at: Date.now() } : { t: 0, items: [], at: Date.now() };
+  } catch (e) {
+    if (e === 'auth') throw e;
+    if (e === 403) quotaHit = Date.now();
+    return e === 404 ? { t: 0, items: [], at: Date.now() } : null;   // 네트워크·한도 오류면 예전 값을 그대로 둠
   }
-  return { t: 0, at: Date.now() };
 }
 async function loadLatest(force) {
   if (Date.now() - quotaHit < 600000) return;
-  const stale = known().filter(s => force || !latest[s.id] || Date.now() - latest[s.id].at > 15 * 60000);
+  const stale = known().filter(s => force || !latest[s.id] || !latest[s.id].items || Date.now() - latest[s.id].at > 15 * 60000);
   for (let i = 0; i < stale.length; i += 8) {
     const part = stale.slice(i, i + 8);
     const r = await Promise.all(part.map(s => latestOf(s.id)));
@@ -414,6 +480,11 @@ function applyImport() {
   localStorage.removeItem(LS('pending'));
   return true;
 }
+
+/* ---------- 공유 메뉴로 들어온 주소 (안드로이드) ---------- */
+{ const q = new URLSearchParams(location.search), t = [q.get('su'), q.get('sx'), q.get('st')].filter(Boolean).join(' ');
+  if (t) { keep('share', (t.match(/https?:\/\/\S+/) || [t])[0]); history.replaceState(null, '', location.pathname); } }
+function takeShare() { const u = load('share', null); if (!u) return; localStorage.removeItem(LS('share')); go({ name: 'pl' }); addDlg(u); }
 
 /* ---------- 시작 ---------- */
 // 연결이 끊겨도 저장된 목록은 그대로 보여 주고, 아래에 '다시 연결' 버튼만 띄움
@@ -442,7 +513,8 @@ async function sync(full = true) {
     if (dirty) await driveSave();
     if (view.name === 'loading' || view.name === 'auth') view = { name: 'home' };
     render();
-    if (full) { await loadSubs(); await loadExtra(); fullAt = Date.now(); render(); loadPls().then(render).catch(() => {}); }
+    if (full) { await loadSubs(); await loadExtra(); fullAt = Date.now(); render(); loadPls().then(() => { render(); takeShare(); }).catch(() => {}); }
+    else takeShare();
     await loadLatest(false);
   } catch (e) { if (e === 'auth') needAuth(); else toast('불러오기 실패'); }
   syncing = false;
@@ -464,7 +536,7 @@ function openChannel(id) {
   openUrl(`https://www.youtube.com/channel/${id}/videos`);
 }
 function openVideo(id, vid) {
-  data.seen[id] = Date.now(); save(1); render();
+  data.watched[vid] = Date.now(); save(1); render();
   openUrl(`https://www.youtube.com/watch?v=${vid}`);
 }
 let busy = new Set(), dropped = new Set();
@@ -483,9 +555,23 @@ async function toggleSub(id, track) {
   } catch (e) { e === 'auth' ? needAuth() : toast(e === 403 ? '오늘 한도를 다 썼습니다' : '실패했습니다'); }
   busy.delete(id); render();
 }
+function vidMenu(ch, vid) {
+  const v = vidsOf(ch).find(x => x.vid === vid); if (!v) return;
+  const w = !!data.watched[vid] || !isNewV(ch, v);
+  choose(v.title, [['add', '재생목록에 넣기'], ['w', w ? '안 본 것으로 표시' : '봤음으로 표시'], ['ch', '채널로 가기']], '', k => {
+    if (k === 'add') addDlg('https://youtu.be/' + vid);
+    if (k === 'w') { if (w) { delete data.watched[vid]; if ((data.seen[ch] || 0) >= v.t) data.seen[ch] = v.t - 1; } else data.watched[vid] = Date.now(); save(1); render(); }
+    if (k === 'ch') openChannel(ch);
+  });
+}
 function chMenu(id) {
   const s = subOf(id); if (!s) return;
-  choose(s.title, s.off ? [['sub', '구독']] : [['unsub', '구독 해제', 'danger']], '', () => toggleSub(id, view.name === 'review'));
+  const g = ['group', 'home'].includes(view.name) ? curGroup() : null, pinned = g?.pin?.includes(id);
+  const opts = [...(g && g.ch.includes(id) ? [['pin', pinned ? '고정 풀기' : '맨 위에 고정']] : []), s.off ? ['sub', '구독'] : ['unsub', '구독 해제', 'danger']];
+  choose(s.title, opts, '', v => {
+    if (v === 'pin') { g.pin = pinned ? g.pin.filter(x => x !== id) : [...(g.pin || []), id]; save(); render(); }
+    else toggleSub(id, view.name === 'review');
+  });
 }
 const vidOf = x => (String(x).match(/(?:[?&]v=|youtu\.be\/|shorts\/|live\/|embed\/)([\w-]{11})/) || String(x).trim().match(/^([\w-]{11})$/) || [])[1];
 const listOf = x => (String(x).match(/[?&]list=([\w-]+)/) || [])[1];
@@ -516,8 +602,29 @@ function plMove(id) {
 }
 function plMenu(id) {
   const p = pls.find(x => x.id === id); if (!p) return;
-  choose(p.title, [['move', '그룹 옮기기'], ['add', '주소로 넣기'], ['open', '뮤직 앱에서 재생목록 열기']], '', v => {
+  choose(p.title, [['move', '그룹 옮기기'], ['add', '주소로 넣기'], ['rename', '이름 바꾸기'], ['open', '뮤직 앱에서 열기'], ['del', '재생목록 삭제', 'danger']], '', v => {
     if (v === 'open') openPl(id); if (v === 'move') plMove(id); if (v === 'add') addDlg('', id);
+    if (v === 'rename') ask('재생목록 이름', p.title, async n => {
+      try { await api('https://www.googleapis.com/youtube/v3/playlists?part=snippet', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, snippet: { title: n } }) }); p.title = n; keep('pls', pls); render(); }
+      catch (e) { e === 'auth' ? needAuth() : toast('이름 바꾸기 실패'); }
+    });
+    if (v === 'del') choose(`'${p.title}'을 삭제할까요? 유튜브에서도 지워집니다`, [['y', '삭제', 'danger']], '', async () => {
+      try {
+        await api('https://www.googleapis.com/youtube/v3/playlists?id=' + id, { method: 'DELETE' });
+        pls = pls.filter(x => x.id !== id); keep('pls', pls); data.pl.groups.forEach(g => g.pl = g.pl.filter(x => x !== id)); save();
+        if (view.id === id) go({ name: 'pl', ps: view.ps }); else render(); toast('삭제했습니다');
+      } catch (e) { e === 'auth' ? needAuth() : toast('삭제 실패'); }
+    });
+  });
+}
+async function newPl(then) {
+  ask('새 재생목록', '', async n => {
+    try {
+      const r = await api('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { title: n }, status: { privacyStatus: 'private' } }) });
+      const p = { id: r.id, title: n, thumb: '', count: 0 }; pls.unshift(p); keep('pls', pls);
+      const g = data.pl.groups.find(x => x.id === view.ps); if (g) { g.pl.push(p.id); save(); }
+      render(); then?.(p.id);
+    } catch (e) { e === 'auth' ? needAuth() : toast('만들기 실패'); }
   });
 }
 function plGroupMenu(gid) {
@@ -532,7 +639,7 @@ function addDlg(url, pre) {
   const d = document.createElement('div'); d.className = 'dlg top';
   const picked = new Set(pre ? [pre] : []);
   const draw = () => { const v = d.querySelector('input')?.value ?? url;
-    d.innerHTML = `<div class="box"><b style="font-size:17px">재생목록에 넣기</b><input placeholder="곡·영상·앨범 주소" value="${esc(v)}" inputmode="url"><div class="chips">${pls.map(p => `<button class="chip ${picked.has(p.id) ? 'on' : ''}" data-pk="${p.id}">${esc(p.title)}</button>`).join('')}</div><div class="btns"><button class="btn s" data-x="c">취소</button><button class="btn p" data-x="ok" ${picked.size ? '' : 'disabled'}>넣기</button></div></div>`; };
+    d.innerHTML = `<div class="box"><b style="font-size:17px">재생목록에 넣기</b><input placeholder="곡·영상·앨범 주소" value="${esc(v)}" inputmode="url">${navigator.clipboard?.readText ? '<button class="paste" data-x="paste">붙여넣기</button>' : ''}<div class="chips">${pls.map(p => `<button class="chip ${picked.has(p.id) ? 'on' : ''}" data-pk="${p.id}">${esc(p.title)}</button>`).join('')}<button class="chip" data-x="new" style="border-style:dashed;color:var(--sub)">새 재생목록</button></div><div class="btns"><button class="btn s" data-x="c">취소</button><button class="btn p" data-x="ok" ${picked.size ? '' : 'disabled'}>넣기</button></div></div>`; };
   draw(); document.body.append(d);
   if (!url) d.querySelector('input').focus();
   d.onclick = e => {
@@ -541,6 +648,8 @@ function addDlg(url, pre) {
     if (k) { picked.has(k.dataset.pk) ? picked.delete(k.dataset.pk) : picked.add(k.dataset.pk); return draw(); }
     const x = e.target.closest('[data-x]')?.dataset.x;
     if (x === 'c') d.remove();
+    if (x === 'paste') navigator.clipboard.readText().then(t => { d.querySelector('input').value = (t.match(/https?:\/\/\S+/) || [t])[0]; }).catch(() => toast('붙여넣기를 허용해 주세요'));
+    if (x === 'new') { const u = d.querySelector('input').value; d.remove(); newPl(id => addDlg(u, id)); }
     if (x === 'ok') {
       const u = d.querySelector('input').value, v = vidOf(u), l = listOf(u);
       if (v) { d.remove(); return addTo(v, [...picked]); }            // 곡·영상 하나 (재생목록 안에서 공유한 곡도 곡 하나로)
@@ -617,24 +726,44 @@ const chRow = (s, attr = '') => {
   const n = isNew(s.id);
   return `<button class="item ${n ? 'new' : ''} ${s.off ? 'off' : ''}" data-ch="${s.id}" ${attr}>
     <span class="av" style="background-image:url('${esc(s.thumb)}')"></span>
-    <span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${s.off ? '구독 안 함 · ' : ''}${l.title ? esc(l.title) + ' · ' + ago(l.t) : (l.at ? '영상 없음' : '')}</span></span>
-    ${n ? '<span class="dot" aria-label="새 영상"></span>' : ''}</button>`;
+    <span class="body"><span class="name">${curGroup()?.pin?.includes(s.id) && ['group', 'home'].includes(view.name) ? pinIc : ''}${esc(s.title)}</span><span class="vs">${s.off ? '구독 안 함 · ' : ''}${l.title ? esc(l.title) + ' · ' + ago(l.t) : (l.at ? '영상 없음' : '')}</span></span>
+    ${n ? `<span class="badge" aria-label="새 영상">${newVids(s.id).length}</span>` : ''}</button>`;
 };
-const vCard = s => {
-  const l = latest[s.id];
-  return `<button class="vcard" data-v="${s.id}" data-vid="${l.vid}" style="text-align:left">
-    <span class="thumb" style="background-image:url('${esc(l.thumb)}')"></span>
-    <span class="vt">${esc(l.title)}</span><span class="vs">${esc(s.title)} · ${ago(l.t)}</span></button>`;
-};
-const freshList = () => known().filter(s => isNew(s.id)).sort((a, b) => latest[b.id].t - latest[a.id].t);
+const nd = v => isNewV(v.ch, v) ? '<span class="nd"></span>' : '';
+const vCard = v => `<button class="vcard ${isNewV(v.ch, v) ? '' : 'seen'}" data-v="${v.ch}" data-vid="${v.vid}" style="text-align:left">
+    <span class="thumb" style="background-image:url('${esc(v.thumb)}')">${nd(v)}</span>
+    <span class="vt">${esc(v.title)}</span><span class="vs">${esc(v.chTitle)} · ${ago(v.t)}</span></button>`;
+const vRow = v => `<button class="item ${isNewV(v.ch, v) ? 'new' : 'seen'}" data-v="${v.ch}" data-vid="${v.vid}"><span class="pthumb" style="background-image:url('${esc(v.thumb)}')">${nd(v)}</span><span class="body"><span class="name">${esc(v.title)}</span><span class="vs">${esc(v.chTitle)} · ${ago(v.t)}</span></span></button>`;
+const freshList = () => feedOf(known()).filter(v => isNewV(v.ch, v));
+const pinIc = '<svg class="pin" viewBox="0 0 24 24"><path d="M15 3l6 6-3 1-4 4 1 5-2 2-4-4-5 5-1-1 5-5-4-4 2-2 5 1 4-4z"/></svg>';
 
 /* ---------- 휴대폰 화면 ---------- */
 const tabs = t => `<div class="tabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const railTabs = t => `<div class="rtabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const plRow = p => `<button class="item" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">${p.count}개</span></span></button>`;
+const fmtDur = t => { const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s2 = t % 60; return h ? `${h}시간 ${m}분` : m ? `${m}분${s2 && t < 600 ? ' ' + s2 + '초' : ''}` : `${s2}초`; };
+const plMeta = p => { const c = plItems[p.id]; const tot = c?.items.reduce((a, x) => a + (x.dur || 0), 0); return `${p.count}개${tot ? ' · ' + fmtDur(tot) : ''}`; };
 const trackRow = (pid, it, i, n) => view.edit
-  ? `<div class="item"><span class="pthumb" style="background-image:url('${esc(it.thumb)}')"></span><span class="body"><span class="name">${esc(it.title)}</span><span class="vs">${esc(it.ch)}</span></span><span class="mv"><button data-tu="${i}" aria-label="위로" ${i ? '' : 'disabled style="opacity:.25"'}>${ic.up}</button><button data-td="${i}" aria-label="아래로" ${i < n - 1 ? '' : 'disabled style="opacity:.25"'}>${ic.down}</button><button data-tx="${i}" aria-label="빼기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span></div>`
-  : `<button class="item" data-mv="${it.vid}" data-pi="${it.pi}" data-pid="${pid}"><span class="pthumb" style="background-image:url('${esc(it.thumb)}')"></span><span class="body"><span class="name">${esc(it.title)}</span><span class="vs">${esc(it.ch)}</span></span></button>`;
+  ? `<div class="item ${tsel.has(it.pi) ? 'on' : ''}" data-ts="${it.pi}" style="cursor:pointer"><span class="ichk">${ic.chk}</span><span class="pthumb" style="background-image:url('${esc(it.thumb)}')"></span><span class="body"><span class="name">${esc(it.title)}</span><span class="vs">${esc(it.ch)}${it.dur ? ' · ' + fmtDur(it.dur) : ''}</span></span><span class="mv"><button data-tu="${i}" aria-label="위로" ${i ? '' : 'disabled style="opacity:.25"'}>${ic.up}</button><button data-td="${i}" aria-label="아래로" ${i < n - 1 ? '' : 'disabled style="opacity:.25"'}>${ic.down}</button><button data-tx="${i}" aria-label="빼기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span></div>`
+  : `<button class="item" data-mv="${it.vid}" data-pi="${it.pi}" data-pid="${pid}"><span class="pthumb" style="background-image:url('${esc(it.thumb)}')"></span><span class="body"><span class="name">${esc(it.title)}</span><span class="vs">${esc(it.ch)}${it.dur ? ' · ' + fmtDur(it.dur) : ''}</span></span></button>`;
+const bulkBar = () => view.edit && tsel.size ? `<div class="sheet"><b style="font-size:16px">${tsel.size}곡 선택</b><div class="btns" style="margin-top:12px"><button class="btn s" data-act="bmove">옮기기</button><button class="btn s" data-act="bcopy">복사</button><button class="btn s danger" data-act="brm">빼기</button></div></div>` : '';
+async function bulk(kind, target) {
+  const pid = view.id, items = plItems[pid].items.filter(x => tsel.has(x.pi)); let done = 0;
+  const bump = (id, d) => { const p = pls.find(x => x.id === id); if (p) p.count += d; };
+  try {
+    let have = null;
+    if (target) { await loadItems(target, true); have = new Set(plItems[target].items.map(x => x.vid)); }
+    for (const it of items) {
+      if (target && !have.has(it.vid)) { await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: target, resourceId: { kind: 'youtube#video', videoId: it.vid } } }) }); have.add(it.vid); bump(target, 1); }
+      if (kind !== 'copy') { await api('https://www.googleapis.com/youtube/v3/playlistItems?id=' + it.pi, { method: 'DELETE' }); plItems[pid].items = plItems[pid].items.filter(x => x.pi !== it.pi); bump(pid, -1); }
+      done++; tsel.delete(it.pi); if (done % 5 === 0) { toast(`처리 중 ${done}/${items.length}`); render(); }
+    }
+  } catch (e) { if (e === 'auth') return needAuth(); toast(`${done}곡 처리하고 멈췄습니다${e === 403 ? ' (오늘 한도)' : ''}`); }
+  if (target) delete plItems[target];
+  keep('pls', pls); render();
+  if (done === items.length) toast(`${done}곡을 ${{ move: '옮겼습니다', copy: '복사했습니다', rm: '뺐습니다' }[kind]}`);
+}
+const pickTarget = (title, fn) => { const o = pls.filter(p => p.id !== view.id).map(p => [p.id, p.title]); o.length ? choose(title, o, '', fn) : toast('다른 재생목록이 없습니다'); };
 const trackList = pid => { const c = plItems[pid]; return !c ? '<div class="center"><span class="vs">불러오는 중</span></div>' : c.items.length ? c.items.map((it, i) => trackRow(pid, it, i, c.items.length)).join('') : '<div class="center"><span class="vs">비어 있습니다</span></div>'; };
 async function moveTrack(pid, i, j) {
   // 삭제·비공개 영상은 목록에 안 보여도 자리를 차지하므로, 화면 순번이 아니라 유튜브의 실제 자리 번호로 옮김
@@ -656,15 +785,15 @@ async function removeTrack(pid, pi) {
 function plvView() {
   const p = pls.find(x => x.id === view.id); if (!p) { view = { name: 'pl' }; return plView(); }
   const first = plItems[p.id]?.items[0];
-  if (view.edit) return `<div class="head"><div class="row"><h1 style="font-size:20px">${esc(p.title)} 편집</h1><button class="pill" data-act="pledit">완료</button></div><div class="meta">화살표로 순서 바꾸기 · ✕로 빼기</div></div>
-  <div class="main">${trackList(p.id)}</div>`;
+  if (view.edit) return `<div class="head"><div class="row"><h1 style="font-size:20px">${esc(p.title)} 편집</h1><button class="pill" data-act="tselall" style="border:0">전체</button><button class="pill" data-act="pledit">완료</button></div><div class="meta">눌러서 여러 곡 고르기 · 화살표로 순서 바꾸기</div></div>
+  <div class="main" style="padding-bottom:0">${trackList(p.id)}${bulkBar()}</div>`;
   return `<div class="head"><div class="row"><button class="ib back" data-act="plback" aria-label="뒤로">${ic.back}</button><span style="flex:1"></span>${first ? `<button class="pill" data-act="plplay">전체 재생</button>` : ''}<button class="pill" data-act="pledit">편집</button><button class="ib" data-act="plmenu" aria-label="메뉴">${ic.more}</button></div>
-    <div class="row"><h1>${esc(p.title)}</h1></div><div class="meta">${p.count}개</div></div>
+    <div class="row"><h1>${esc(p.title)}</h1></div><div class="meta">${plMeta(p)}</div></div>
   <div class="main">${trackList(p.id)}<button class="add" data-act="pladd" style="border-style:solid">주소로 넣기</button></div>`;
 }
 function plView() {
   const secs = plSections();
-  return `<div class="head"><div class="row">${tabs('pl')}<button class="ib" data-act="plnewgroup" aria-label="새 그룹"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><div class="meta">재생목록 ${pls.length}개</div></div>
+  return `<div class="head"><div class="row">${tabs('pl')}<button class="ib" data-act="pladdmenu" aria-label="추가"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><div class="meta">재생목록 ${pls.length}개</div></div>
   <div class="main">${secs.map(x => `${secs.length > 1 ? `<button class="sec" ${x.g ? `data-plg="${x.g.id}"` : ''}><h2>${esc(x.name)}</h2><span class="vs">${x.list.length}개</span></button>` : ''}${x.list.map(plRow).join('')}`).join('')}
     ${pls.length ? '' : '<div class="center"><span class="vs">재생목록이 없습니다</span></div>'}
     <button class="add" data-act="pladd" style="border-style:solid">주소로 넣기</button></div>`;
@@ -673,9 +802,9 @@ function home() {
   const fresh = freshList();
   const un = unsorted();
   const gs = sortGroups(data.groups);
-  return `<div class="head"><div class="row">${tabs('sub')}<button class="ib" data-act="gsort" aria-label="정렬">${ic.sort}</button><button class="ib" data-act="menu" aria-label="메뉴">${ic.more}</button></div><div class="meta">그룹 ${data.groups.length}개 · 채널 ${subs.length}개</div></div>
+  return `<div class="head"><div class="row">${tabs('sub')}<button class="ib" data-act="search" aria-label="검색">${ic.find}</button><button class="ib" data-act="gsort" aria-label="정렬">${ic.sort}</button><button class="ib" data-act="menu" aria-label="메뉴">${ic.more}</button></div><div class="meta">그룹 ${data.groups.length}개 · 채널 ${subs.length}개</div></div>
   <div class="main">
-    ${fresh.length ? `<div class="sec"><h2>새로 올라온 영상</h2><span class="badge">${fresh.length}</span></div><div class="strip">${fresh.slice(0, 20).map(vCard).join('')}</div>` : ''}
+    ${fresh.length ? `<div class="sec"><h2>새로 올라온 영상</h2><span class="badge">${fresh.length}</span></div><div class="strip">${fresh.slice(0, 30).map(vCard).join('')}</div>` : ''}
     ${un.length ? `<button class="notice" data-act="organize" style="width:calc(100% - 36px)">미분류 채널 ${un.length}개<b>정리하기 ›</b></button>` : ''}
     <div style="padding-top:6px">${gs.map(g => {
       const list = chOf(g); const n = newCount(list);
@@ -688,11 +817,15 @@ function groupView() {
   const g = data.groups.find(x => x.id === view.id);
   if (!g) { view = { name: 'home' }; return home(); }
   const list = sortChannels(chOf(g), g);
-  const n = newCount(list);
+  const n = newCount(list), gt = load('gtab', 'ch');
+  const seg = [['ch', '채널'], ['v', '영상']].map(x => `<button class="pill" data-gt="${x[0]}" style="${x[0] === gt ? 'background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:700' : ''}">${x[1]}</button>`).join('');
+  const body = gt === 'v'
+    ? (feedOf(list).slice(0, 100).map(vRow).join('') || '<div class="center"><span class="vs">영상이 없습니다</span></div>')
+    : (list.length ? list.map(s => chRow(s)).join('') : '<div class="center"><span class="vs">채널이 없습니다</span></div>') + '<button class="add" data-act="organize-g">채널 넣기 · 빼기</button>';
   return `<div class="head"><div class="row"><button class="ib back" data-act="home" aria-label="뒤로">${ic.back}</button><span style="flex:1"></span>${n ? '<button class="pill" data-act="allseen">모두 확인</button>' : ''}<button class="ib" data-act="gmenu" aria-label="메뉴">${ic.more}</button></div>
-    <div class="row"><h1>${esc(g.name)}</h1><button class="pill" data-act="csort">${label(chSorts, data.sort.channels)}</button></div><div class="meta">채널 ${list.length}개${n ? ' · 새 영상 ' + n + '개' : ''}</div></div>
-  <div class="main">${list.length ? list.map(s => chRow(s)).join('') : '<div class="center"><span class="vs">채널이 없습니다</span></div>'}
-    <button class="add" data-act="organize-g">채널 넣기 · 빼기</button></div>`;
+    <div class="row"><h1>${esc(g.name)}</h1>${gt === 'ch' ? `<button class="pill" data-act="csort">${label(chSorts, data.sort.channels)}</button>` : ''}</div><div class="meta">채널 ${list.length}개${n ? ' · 새 영상 ' + n + '개' : ''}</div>
+    <div class="seg" style="padding:0 0 14px">${seg}</div></div>
+  <div class="main">${body}</div>`;
 }
 function organize() {
   const gid = view.gid || null;
@@ -728,6 +861,26 @@ function review() {
       <span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${lastUp(s.id) ? ago(lastUp(s.id)) : stats[s.id] ? '영상 없음' : ''}${stats[s.id] ? ' · ' + fmtN(stats[s.id].n) : ''}</span></span>
       <button class="tg ${sub ? 'un' : 'keep'}" data-rs="${s.id}" ${b ? 'disabled style="opacity:.5"' : ''}>${b ? '…' : sub ? '구독 해제' : '구독'}</button></div>`; }).join('') || '<div class="center"><span class="vs">해당 채널이 없습니다</span></div>'}</div>`;
 }
+function search() {
+  return `<div class="head"><div class="row" style="padding-bottom:14px"><input id="q" class="srch" placeholder="채널·영상·그룹·재생목록" value="${esc(view.q || '')}" autocomplete="off"><button class="pill" data-act="home" style="border:0">닫기</button></div></div>
+  <div class="main" id="sr">${searchRes(view.q || '')}</div>`;
+}
+function searchRes(q) {
+  q = q.trim().toLowerCase(); if (!q) return '<div class="center"><span class="vs">이름이나 제목 일부를 입력하세요</span></div>';
+  const m = t => String(t).toLowerCase().includes(q), sec = (t, a) => a.length ? `<div class="sec"><h2>${t}</h2><span class="vs">${a.length}</span></div>${a.slice(0, 40).join('')}` : '';
+  const gs = data.groups.filter(g => m(g.name)).map(g => `<button class="item" data-g="${g.id}"><span class="gav">${esc(g.name.slice(0, 1))}</span><span class="body"><span class="name">${esc(g.name)}</span><span class="vs">채널 ${chOf(g).length}개</span></span></button>`);
+  const cs = known().filter(s => m(s.title)).map(s => chRow(s));
+  const vs = feedOf(known()).filter(v => m(v.title)).map(vRow);
+  const ps = pls.filter(p => m(p.title)).map(plRow);
+  const tr = Object.entries(plItems).flatMap(([pid, c]) => c.items.filter(x => m(x.title)).map(it => trackRow(pid, it)));
+  return (sec('그룹', gs) + sec('채널', cs) + sec('영상', vs) + sec('재생목록', ps) + sec('곡', tr)) || '<div class="center"><span class="vs">찾는 항목이 없습니다</span></div>';
+}
+const dRow = v => `<button class="drow ${isNewV(v.ch, v) ? '' : 'seen'}" data-v="${v.ch}" data-vid="${v.vid}"><span class="thumb" style="background-image:url('${esc(v.thumb)}')">${nd(v)}</span><span style="min-width:0;display:flex;flex-direction:column;gap:4px"><span class="vt">${esc(v.title)}</span><span class="vs">${esc(v.chTitle)} · ${ago(v.t)}</span></span></button>`;
+function deck() {
+  const gs = sortGroups(data.groups);
+  return `<div class="deck"><div class="head"><div class="row" style="padding-bottom:10px"><h1>나란히 보기</h1><button class="pill" data-act="home">닫기</button></div></div>
+  <div class="cols">${gs.map(g => { const l = chOf(g), n = newCount(l); return `<section class="dcol"><button class="dh" data-g="${g.id}"><span>${esc(g.name)}</span>${n ? `<span class="badge">${n}</span>` : ''}</button><div class="dl">${feedOf(l).slice(0, 40).map(dRow).join('') || '<div class="center"><span class="vs">영상이 없습니다</span></div>'}</div></section>`; }).join('')}</div></div>`;
+}
 function reorder() {
   return `<div class="head"><div class="row"><h1 style="font-size:20px">그룹 순서</h1><button class="pill" data-act="home">완료</button></div><div class="meta"></div></div>
   <div class="main">${data.groups.map((g, i) => `<div class="item"><span class="gav">${esc(g.name.slice(0, 1))}</span><span class="body"><span class="name">${esc(g.name)}</span></span><span class="mv"><button data-up="${i}" aria-label="위로" ${i ? '' : 'disabled style="opacity:.25"'}>${ic.up}</button><button data-dn="${i}" aria-label="아래로" ${i < data.groups.length - 1 ? '' : 'disabled style="opacity:.25"'}>${ic.down}</button></span></div>`).join('')}</div>`;
@@ -745,12 +898,12 @@ function plWide() {
       <button class="rg" data-act="plnewgroup" style="opacity:.8">+ 새 그룹</button></div>
     <div class="col"><div class="top"><h2>${esc(cur.name)}</h2><div class="vs" style="margin-top:4px">재생목록 ${cur.list.length}개</div></div>
       <div class="list">${cur.list.map(p => `<button class="item ${p.id === sel.id ? 'sel' : ''}" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">${p.count}개</span></span></button>`).join('')}</div></div>
-    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(sel.title)}</h2>${plItems[sel.id]?.items.length ? '<button class="pill" data-act="plplay">전체 재생</button>' : ''}<button class="pill ${view.edit ? 'p' : ''}" data-act="pledit">${view.edit ? '완료' : '편집'}</button><button class="pill" data-act="plmenu">더보기</button><button class="pill p" data-act="pladd">주소로 넣기</button></div>
-      <div style="max-width:760px">${trackList(sel.id)}</div></div></div>`;
+    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(sel.title)}<div class="vs" style="font-size:14px;font-weight:400;margin-top:4px">${plMeta(sel)}</div></h2>${plItems[sel.id]?.items.length ? '<button class="pill" data-act="plplay">전체 재생</button>' : ''}<button class="pill ${view.edit ? 'p' : ''}" data-act="pledit">${view.edit ? '완료' : '편집'}</button><button class="pill" data-act="plmenu">더보기</button><button class="pill p" data-act="pladd">주소로 넣기</button></div>
+      <div style="max-width:760px">${trackList(sel.id)}${bulkBar()}</div></div></div>`;
   return `<div class="wide"><div class="rail">${railTabs('pl')}
       ${secs.map(x => `<button class="rg ${x.key === view.ps ? 'sel' : ''}" data-ps="${x.key}"><span>${esc(x.name)}</span><i style="font-weight:500">${x.list.length}</i></button>`).join('')}
       <button class="rg" data-act="plnewgroup" style="opacity:.8">+ 새 그룹</button></div>
-    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(cur.name)}</h2>${cur.g ? `<button class="pill" data-plg="${cur.g.id}">그룹 편집</button>` : ''}<button class="pill p" data-act="pladd">주소로 넣기</button></div>
+    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(cur.name)}</h2><button class="pill" data-act="plnew">새 재생목록</button>${cur.g ? `<button class="pill" data-plg="${cur.g.id}">그룹 편집</button>` : ''}<button class="pill p" data-act="pladd">주소로 넣기</button></div>
       <div class="grid">${cur.list.map(p => `<button class="vcard" data-pl="${p.id}" style="text-align:left"><span class="thumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="vt">${esc(p.title)}</span><span class="vs">${p.count}개</span></button>`).join('')}</div></div></div>`;
 }
 function wide() {
@@ -760,19 +913,19 @@ function wide() {
   if (!view.wg) view.wg = gs[0]?.id || (un.length ? 'un' : null);
   const g = data.groups.find(x => x.id === view.wg);
   const list = view.wg === 'un' ? un : g ? sortChannels(chOf(g), g) : [];
-  const vids = list.filter(s => latest[s.id]?.vid).sort((a, b) => latest[b.id].t - latest[a.id].t);
+  const vids = feedOf(list).slice(0, 90);
   const title = view.wg === 'un' ? '미분류' : g ? g.name : '';
   return `<div class="wide">
     <div class="rail">${railTabs('sub')}
       ${un.length ? `<button class="rg un ${view.wg === 'un' ? 'sel' : ''}" data-wg="un"><span>미분류</span><i>${un.length}</i></button>` : ''}
       ${gs.map(x => { const n = newCount(chOf(x)); return `<button class="rg ${x.id === view.wg ? 'sel' : ''}" data-wg="${x.id}"><span>${esc(x.name)}</span>${n ? `<i>${n}</i>` : ''}</button>`; }).join('')}
       <button class="rg" data-act="newgroup" style="opacity:.8">+ 새 그룹</button>
-      <span style="flex:1"></span><button class="rg" data-act="review">구독 정리</button><button class="rg" data-act="theme">화면 테마</button>
+      <span style="flex:1"></span><button class="rg" data-act="search">검색</button><button class="rg" data-act="deck">나란히 보기</button><button class="rg" data-act="wmenu">더보기</button>
     </div>
     <div class="col"><div class="top"><h2>${esc(title)}</h2><div class="vs" style="margin-top:4px">채널 ${list.length}개</div></div>
       <div class="list">${list.map(s => chRow(s)).join('')}</div></div>
     <div class="feed"><div class="bar">
-      ${g ? `<button class="pill" data-act="csort">${label(chSorts, data.sort.channels)}</button><button class="pill" data-act="gmenu">그룹 편집</button>` : ''}
+      ${g ? `<button class="pill" data-act="csort">${label(chSorts, data.sort.channels)}</button><button class="pill" data-act="gmenu">그룹 편집</button>` : ''}${newCount(list) ? '<button class="pill" data-act="allseen">모두 확인</button>' : ''}
       <span style="flex:1"></span><button class="pill" data-act="gsort">${label(groupSorts, data.sort.groups)}</button>
       <button class="pill p" data-act="organize-w">정리 모드</button></div>
       <div class="grid">${vids.map(vCard).join('')}</div></div>
@@ -781,17 +934,17 @@ function wide() {
 
 /* ---------- 그리기 ---------- */
 // 화면을 다시 그려도 스크롤 자리를 지킴 (같은 화면일 때만; 왼쪽 레일은 항상)
-const SCR = ['.rail', '.main', '.list', '.feed', '.strip', '.chips'];
+const SCR = ['.rail', '.main', '.list', '.feed', '.strip', '.chips', '.cols', '.dl'];
 let lastKey = '';
 function render() {
   if (view.name === 'loading') { lastKey = ''; $app.innerHTML = center('<span class="vs">불러오는 중</span>'); return; }
   if (view.name === 'auth') { lastKey = ''; $app.innerHTML = center('<button class="btn p" data-act="login">계속</button>'); return; }
   if (!data) return;
   norm(data);
-  const narrow = { home, group: groupView, organize, reorder, review, pl: plView, plv: plvView }[view.name]?.() || home();
+  const narrow = { home, group: groupView, organize, reorder, review, pl: plView, plv: plvView, search, deck }[view.name]?.() || home();
   const showWide = view.name === 'home' || view.name === 'group' || view.name === 'pl' || view.name === 'plv';
-  const html = (showWide ? `<div class="narrow app">${narrow}</div>${wide()}` : `<div class="app ${view.name === 'review' ? 'rv' : ''}">${narrow}</div>`) + (authNeeded ? '<button class="relog" data-act="login">다시 연결</button>' : '');
-  const key = [view.name, view.id, view.wg, view.ps, view.filter, view.gid].join('|');
+  const html = (showWide ? `<div class="narrow app">${narrow}</div>${wide()}` : `<div class="app ${['review', 'search'].includes(view.name) ? 'rv' : ''}">${narrow}</div>`) + (authNeeded ? '<button class="relog" data-act="login">다시 연결</button>' : '');
+  const key = [view.name, view.id, view.wg, view.ps, view.filter, view.gid, load('gtab', 'ch')].join('|');
   const pos = SCR.map((q, i) => i && key !== lastKey ? [] : [...$app.querySelectorAll(q)].map(e => [e.scrollTop, e.scrollLeft]));
   $app.innerHTML = html;
   SCR.forEach((q, i) => [...$app.querySelectorAll(q)].forEach((e, k) => { const p = pos[i][k]; if (p && (p[0] || p[1])) { e.scrollTop = p[0]; e.scrollLeft = p[1]; } }));
@@ -801,16 +954,19 @@ function render() {
 /* ---------- 입력 ---------- */
 let press = null, pressed = false;
 const lpT = e => e.target.closest('[data-ch],[data-pl],[data-vid],[data-mv]');
-const lpRun = t => t.dataset.mv ? itemMenu(t.dataset.pid, t.dataset.mv, t.dataset.pi) : t.dataset.ch ? chMenu(t.dataset.ch) : t.dataset.pl ? plMenu(t.dataset.pl) : addDlg('https://youtu.be/' + t.dataset.vid);
+const lpRun = t => t.dataset.mv ? itemMenu(t.dataset.pid, t.dataset.mv, t.dataset.pi) : t.dataset.ch ? chMenu(t.dataset.ch) : t.dataset.pl ? plMenu(t.dataset.pl) : vidMenu(t.dataset.v, t.dataset.vid);
 $app.addEventListener('pointerdown', e => { const t = lpT(e); pressed = false; if (!t) return; press = setTimeout(() => { pressed = true; lpRun(t); }, 500); });
 ['pointerup', 'pointercancel', 'pointermove'].forEach(k => $app.addEventListener(k, e => { if (k !== 'pointermove' || Math.abs(e.movementX) + Math.abs(e.movementY) > 4) clearTimeout(press); }));
 $app.addEventListener('contextmenu', e => { const t = lpT(e); if (t) { e.preventDefault(); clearTimeout(press); if (!pressed) { pressed = true; lpRun(t); } } });
+$app.addEventListener('input', e => { if (e.target.id === 'q') { view.q = e.target.value; document.getElementById('sr').innerHTML = searchRes(view.q); } });
 $app.addEventListener('click', e => {
   if (pressed) { pressed = false; return; }
-  const t = e.target.closest('button,[data-ch]'); if (!t) return;
+  const t = e.target.closest('button,[data-ch],[data-ts]'); if (!t) return;
   const d = t.dataset;
   if (d.ch) return openChannel(d.ch);
   if (d.mv) return playTrack(d.pid, d.mv);
+  if (d.ts) { tsel.has(d.ts) ? tsel.delete(d.ts) : tsel.add(d.ts); return render(); }
+  if (d.gt) { keep('gtab', d.gt); return render(); }
   if (d.tu || d.td) { const i = +(d.tu ?? d.td); return moveTrack(view.id, i, d.tu ? i - 1 : i + 1); }
   if (d.tx) { const it = plItems[view.id].items[+d.tx]; return choose(it.title, [['rm', '이 재생목록에서 빼기', 'danger']], '', () => removeTrack(view.id, it.pi)); }
   if (d.pl) return showPl(d.pl);
@@ -833,7 +989,8 @@ $app.addEventListener('click', e => {
     case 'csort': choose('채널 정렬', chSorts, data.sort.channels, v => { data.sort.channels = v; save(); render(); }); break;
     case 'reorder': go({ name: 'reorder' }); break;
     case 'tab-sub': go({ name: 'home' }); break;
-    case 'menu': choose('메뉴', [['organize', '채널 정리'], ['review', '구독 정리'], ['reorder', '그룹 순서'], ['theme', '화면 테마']], '', v => {
+    case 'menu': choose('메뉴', [['organize', '채널 정리'], ['review', '구독 정리'], ['reorder', '그룹 순서'], ['restore', '백업에서 되돌리기'], ['theme', '화면 테마']], '', v => {
+      if (v === 'restore') restoreDlg();
       if (v === 'organize') go({ name: 'organize' });
       if (v === 'reorder') go({ name: 'reorder' });
       if (v === 'review') { go({ name: "review" }); loadStats().catch(() => {}); }
@@ -842,7 +999,21 @@ $app.addEventListener('click', e => {
     case 'theme': themeDlg(); break;
     case 'tab-pl': go({ name: 'pl', ps: view.ps }); if (!pls.length) loadPls().then(render).catch(() => {}); break;
     case 'plback': go({ name: 'pl', ps: view.ps }); break;
-    case 'pledit': view.edit = !view.edit; render(); break;
+    case 'pledit': view.edit = !view.edit; tsel.clear(); render(); break;
+    case 'tselall': { const a = plItems[view.id]?.items || []; a.every(x => tsel.has(x.pi)) ? tsel.clear() : a.forEach(x => tsel.add(x.pi)); render(); break; }
+    case 'bmove': pickTarget('어느 재생목록으로 옮길까요?', id => bulk('move', id)); break;
+    case 'bcopy': pickTarget('어느 재생목록에 복사할까요?', id => bulk('copy', id)); break;
+    case 'brm': choose(`${tsel.size}곡을 이 재생목록에서 뺄까요?`, [['y', '빼기', 'danger']], '', () => bulk('rm')); break;
+    case 'pladdmenu': choose('추가', [['pl', '새 재생목록'], ['g', '새 재생목록 그룹']], '', v => v === 'pl' ? newPl() : ask('새 그룹', '', n => { data.pl.groups.push({ id: uid(), name: n, pl: [] }); save(); render(); })); break;
+    case 'plnew': newPl(); break;
+    case 'search': go({ name: 'search', q: '' }); document.getElementById('q')?.focus(); break;   // 아이폰은 누른 순간에 바로 포커스해야 키보드가 뜸
+    case 'deck': go({ name: 'deck' }); break;
+    case 'wmenu': choose('더보기', [['review', '구독 정리'], ['organize', '채널 정리'], ['restore', '백업에서 되돌리기'], ['theme', '화면 테마']], '', v => {
+      if (v === 'review') { go({ name: 'review' }); loadStats().catch(() => {}); }
+      if (v === 'organize') go({ name: 'organize' });
+      if (v === 'restore') restoreDlg();
+      if (v === 'theme') themeDlg();
+    }); break;
     case 'plplay': { const f = plItems[view.id]?.items[0]; if (f) playTrack(view.id, f.vid); break; }
     case 'plmenu': plMenu(view.id); break;
     case 'plnewgroup': ask('새 그룹', '', n => { data.pl.groups.push({ id: uid(), name: n, pl: [] }); save(); render(); }); break;
@@ -856,7 +1027,7 @@ $app.addEventListener('click', e => {
     case 'selall': { const all = [...$app.querySelectorAll('[data-sel]')].map(b => b.dataset.sel); const every = all.every(x => sel.has(x)); all.forEach(x => every ? sel.delete(x) : sel.add(x)); render(); break; }
     case 'put': data.groups.forEach(g => { if (pick.has(g.id)) sel.forEach(c => { if (!g.ch.includes(c)) g.ch.push(c); }); }); save(); toast(`${sel.size}개를 넣었습니다`); sel.clear(); render(); break;
     case 'pull': { const from = pick.size ? pick : new Set([view.gid]); data.groups.forEach(g => { if (from.has(g.id)) g.ch = g.ch.filter(c => !sel.has(c)); }); save(); toast(`${sel.size}개를 뺐습니다`); sel.clear(); render(); break; }
-    case 'allseen': { const g = cur(); chOf(g).forEach(s => data.seen[s.id] = Date.now()); save(1); render(); break; }
+    case 'allseen': { const g = cur(); if (g) chOf(g).forEach(s => data.seen[s.id] = Date.now()); save(1); render(); break; }
     case 'gmenu': { const g = cur(); if (!g) break; choose(g.name, [['rename', '이름 바꾸기'], ['seen', '모두 확인함'], ['del', '그룹 삭제', 'danger']], '', v => {
       if (v === 'rename') ask('그룹 이름', g.name, n => { g.name = n; save(); render(); });
       if (v === 'seen') { chOf(g).forEach(s => data.seen[s.id] = Date.now()); save(1); render(); }
