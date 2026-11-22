@@ -200,9 +200,9 @@ button.sec{width:100%;text-align:left}
 @font-face{font-family:'HouseYJ';src:url('../fonts/brand-house.woff2') format('woff2');font-display:block}
 .bm{font-family:'HouseYJ',serif;font-weight:600;letter-spacing:.08em}   /* House of YJ 글씨 (Cormorant SC, 작은 대문자) */
 .brand b{color:var(--dot);font-size:17px}
-.logo-s.seal{border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 60%,transparent)}
+.logo-s.seal{border-radius:0}
 .rbrand{display:flex;align-items:center;gap:12px;padding:0 10px 22px}
-.rbrand img{width:44px;height:44px;border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 70%,transparent)}
+.rbrand img{width:44px;height:44px}   /* 버건디 바탕 위: 골드 테두리 + 골드 YJ 로고 */
 .rbrand span{color:var(--gold);font-size:19px}
 @font-face{font-family:'DarakA';src:url('../fonts/darak-A.woff2') format('woff2');font-display:block}
 @font-face{font-family:'DarakB';src:url('../fonts/darak-B.woff2') format('woff2');font-display:block}
@@ -252,7 +252,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-24a';
+const VER = '2026-11-24b';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -948,7 +948,7 @@ const pinIc = '<svg class="pin" viewBox="0 0 24 24"><path d="M15 3l6 6-3 1-4 4 1
 const NAV = [['home', '홈', 'home'], ['subs', '구독', 'sub'], ['pl', '재생목록', 'pl'], ['more', '관리', 'more']];
 const topOf = n => ({ group: 'subs', plv: 'pl', feedall: 'home' }[n] || n);
 const tabbar = () => `<nav class="tabbar">${NAV.map(([k, t, i]) => `<button class="tb ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</nav>`;
-const railNav = () => `<div class="rbrand"><img src="../icons/yj-128.png" alt="YJ"><span class="bm">${BRAND}</span></div><div class="rnav">${NAV.map(([k, t, i]) => `<button class="rn ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</div><div class="rdiv"></div>`;
+const railNav = () => `<div class="rbrand"><img src="../icons/yj-ring.svg" alt="YJ"><span class="bm">${BRAND}</span></div><div class="rnav">${NAV.map(([k, t, i]) => `<button class="rn ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</div><div class="rdiv"></div>`;
 const tabs = t => `<div class="tabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const railTabs = t => `<div class="rtabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const plRow = p => `<button class="item" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">${p.count}개</span></span></button>`;
@@ -1036,7 +1036,7 @@ const notices = () => {
 };
 function home() {
   const fresh = freshList(), gs = sortGroups(data.groups);
-  return `<div class="head"><div class="row"><img class="logo-s seal" src="../icons/yj-128.png" alt="YJ"><h1 class="wm" style="font-size:36px;color:var(--gold)">${APP_NAME}</h1><button class="ib" data-act="search" aria-label="검색">${ic.find}</button></div><div class="meta">구독 ${subs.length}개 · 그룹 ${data.groups.length}개</div></div>
+  return `<div class="head"><div class="row"><img class="logo-s seal" src="../icons/yj-ring.svg" alt="YJ"><h1 class="wm" style="font-size:36px;color:var(--gold)">${APP_NAME}</h1><button class="ib" data-act="search" aria-label="검색">${ic.find}</button></div><div class="meta">구독 ${subs.length}개 · 그룹 ${data.groups.length}개</div></div>
   <div class="main">${homeBody(fresh, gs, 3)}</div>`;
 }
 function feedall() {
