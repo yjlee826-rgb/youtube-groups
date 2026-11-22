@@ -106,6 +106,7 @@ a{color:inherit;text-decoration:none}
 .rtabs .on{opacity:1;color:#F3ECE4;border-bottom-color:var(--gold)}
 .pthumb{width:96px;height:54px;border-radius:8px;background:var(--thumb) center/cover;flex:none}
 button.sec{width:100%;text-align:left}
+.sec .pill.sm{height:30px;padding:0 12px;font-size:13px;border-color:var(--line);color:var(--sub)}
 .thumb .nd{position:absolute;top:8px;right:8px;width:11px;height:11px;border-radius:6px;background:var(--gold);box-shadow:0 0 0 2px rgba(0,0,0,.35)}
 .pthumb{position:relative}
 .pthumb .nd{position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:5px;background:var(--gold);box-shadow:0 0 0 2px rgba(0,0,0,.35)}
@@ -249,7 +250,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23v';
+const VER = '2026-11-23w';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -552,7 +553,7 @@ async function loadPls() {
   let out = [], page = '';
   do {
     const d = await api('https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails&mine=true&maxResults=50' + (page ? '&pageToken=' + page : ''));
-    out = out.concat(d.items.map(p => ({ id: p.id, title: p.snippet.title, thumb: p.snippet.thumbnails?.medium?.url || p.snippet.thumbnails?.default?.url || '', count: p.contentDetails.itemCount })));
+    out = out.concat(d.items.map(p => ({ id: p.id, at: Date.parse(p.snippet.publishedAt) || 0, title: p.snippet.title, thumb: p.snippet.thumbnails?.medium?.url || p.snippet.thumbnails?.default?.url || '', count: p.contentDetails.itemCount })));
     page = d.nextPageToken || '';
   } while (page);
   pls = out; keep('pls', pls); plsAt = Date.now();
@@ -763,10 +764,19 @@ function itemMenu(pid, vid, pi) {
     if (v === 'rm') removeTrack(pid, pi);
   });
 }
+const plSorts = [['yt', '유튜브 순서'], ['name', '이름순'], ['count', '곡 많은 순'], ['new', '최근 만든 순']];
+const plSortKey = () => plSorts.some(x => x[0] === data.sort.pls) ? data.sort.pls : 'yt';
+function sortPls(list) {
+  const k = plSortKey(), a = [...list];
+  if (k === 'name') a.sort((x, y) => x.title.localeCompare(y.title, 'ko'));
+  if (k === 'count') a.sort((x, y) => (y.count || 0) - (x.count || 0));
+  if (k === 'new') a.sort((x, y) => (y.at || 0) - (x.at || 0));
+  return a;
+}
 function plSections() {
   const gs = data.pl.groups, inG = new Set(gs.flatMap(g => g.pl)), by = id => pls.find(p => p.id === id);
-  const out = gs.map(g => ({ key: g.id, g, name: g.name, list: g.pl.map(by).filter(Boolean) }));
-  const rest = pls.filter(p => !inG.has(p.id));
+  const out = gs.map(g => ({ key: g.id, g, name: g.name, list: sortPls(g.pl.map(by).filter(Boolean)) }));
+  const rest = sortPls(pls.filter(p => !inG.has(p.id)));
   if (rest.length || !gs.length) out.push({ key: 'none', name: gs.length ? '그룹 없음' : '전체', list: rest });
   return out;
 }
@@ -982,7 +992,7 @@ function plvView() {
 }
 function plView() {
   const secs = plSections();
-  return `<div class="head"><div class="row"><h1>재생목록</h1><button class="pill" data-act="pladdmenu">새로 만들기</button></div><div class="meta">재생목록 ${pls.length}개 · 곡을 누르면 유튜브 뮤직에서 재생</div></div>
+  return `<div class="head"><div class="row"><h1>재생목록</h1><button class="pill" data-act="psort">${label(plSorts, plSortKey())}</button><button class="pill" data-act="pladdmenu">새로 만들기</button></div><div class="meta">재생목록 ${pls.length}개 · 곡을 누르면 유튜브 뮤직에서 재생</div></div>
   <div class="main">${secs.map(x => `${secs.length > 1 ? `<button class="sec" ${x.g ? `data-plg="${x.g.id}"` : ''}><h2>${esc(x.name)}</h2><span class="vs">${x.list.length}개</span></button>` : ''}${x.list.map(plRow).join('')}`).join('')}
     ${pls.length ? '' : '<div class="center"><span class="vs">재생목록이 없습니다</span></div>'}
     <button class="add" data-act="pladd" style="border-style:solid">링크로 추가</button></div>`;
@@ -1001,12 +1011,12 @@ function heroNew(fresh, side) {
 const homeBody = (fresh, gs, side) => `${notices()}
     <div class="secR"><h2>새 영상</h2><span class="cnt">${fresh.length || ''}</span><button class="more-link" data-act="feedall">전체 ›</button></div>
     ${heroNew(fresh, side)}
-    ${secHead('그룹', 'subs')}<div class="gcards">${gs.map(groupCard).join('')}</div>
-    ${pls.length ? secHead('재생목록', 'pl') + `<div class="pcards">${pls.slice(0, 10).map(plCard).join('')}</div>` : ''}
+    ${secHead('그룹', 'subs', 0, ['gsort', label(groupSorts, data.sort.groups)])}<div class="gcards">${gs.map(groupCard).join('')}</div>
+    ${pls.length ? secHead('재생목록', 'pl', 0, ['psort', label(plSorts, plSortKey())]) + `<div class="pcards">${sortPls(pls).slice(0, 10).map(plCard).join('')}</div>` : ''}
     <div style="height:12px"></div>`;
 const groupTiles = gs => `<div class="tiles">${gs.map(g => { const n = newCount(chOf(g)); return `<button class="tile" data-g="${g.id}"><span>${esc(g.name)}</span>${n ? `<span class="badge">${n}</span>` : ''}</button>`; }).join('')}</div>`;
 const plCard = p => `<button class="pcard" data-pl="${p.id}"><span class="thumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="vt">${esc(p.title)}</span><span class="vs">${p.count}개</span></button>`;
-const secHead = (t, act, n) => `<div class="sec"><h2>${t}${n ? ` <span class="badge" style="margin-left:6px">${n}</span>` : ''}</h2>${act ? `<button class="more-link" data-act="${act}">전체 ›</button>` : ''}</div>`;
+const secHead = (t, act, n, sort) => `<div class="sec"><h2>${t}${n ? ` <span class="badge" style="margin-left:6px">${n}</span>` : ''}</h2>${sort ? `<button class="pill sm" data-act="${sort[0]}" style="margin-left:auto;margin-right:12px">${sort[1]}</button>` : ''}${act ? `<button class="more-link" data-act="${act}">전체 ›</button>` : ''}</div>`;
 const notices = () => {
   const un = unsorted();
   return (token && !load('rt', null) ? `<button class="notice" data-act="login" style="width:calc(100% - 36px)">로그인이 풀리지 않게 하기<b>켜기 ›</b></button>` : '')
@@ -1139,7 +1149,7 @@ function plWide() {
   return `<div class="wide"><div class="rail">${railNav()}<div class="rlabel">재생목록 그룹</div>
       ${secs.map(x => `<button class="rg ${x.key === view.ps ? 'sel' : ''}" data-ps="${x.key}"><span>${esc(x.name)}</span><i style="font-weight:500">${x.list.length}</i></button>`).join('')}
       <button class="rg" data-act="plnewgroup" style="opacity:.8">+ 새 그룹</button></div>
-    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(cur.name)}</h2><button class="pill" data-act="plnew">새 재생목록</button>${cur.g ? `<button class="pill" data-plg="${cur.g.id}">그룹 편집</button>` : ''}<button class="pill p" data-act="pladd">링크로 추가</button></div>
+    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(cur.name)}</h2><button class="pill" data-act="psort">${label(plSorts, plSortKey())}</button><button class="pill" data-act="plnew">새 재생목록</button>${cur.g ? `<button class="pill" data-plg="${cur.g.id}">그룹 설정</button>` : ''}<button class="pill p" data-act="pladd">링크로 추가</button></div>
       <div class="grid">${cur.list.map(p => `<button class="vcard" data-pl="${p.id}" style="text-align:left"><span class="thumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="vt">${esc(p.title)}</span><span class="vs">${p.count}개</span></button>`).join('')}</div></div></div>`;
 }
 function homeWide() {
@@ -1243,6 +1253,7 @@ $app.addEventListener('click', e => {
     case 'feedall': go({ name: 'feedall', from: view.name }); break;
     case 'backg': go({ name: 'group', id: view.gid }); break;
     case 'gsort': choose('그룹 정렬', groupSorts, data.sort.groups, v => { data.sort.groups = v; save(); render(); }); break;
+    case 'psort': choose('재생목록 정렬', plSorts, plSortKey(), v => { data.sort.pls = v; save(); render(); }); break;
     case 'csort': choose('채널 정렬', chSorts, data.sort.channels, v => { data.sort.channels = v; save(); render(); }); break;
     case 'reorder': go({ name: 'reorder', from: view.name }); break;
     case 'tab-sub': go({ name: 'subs', wg: view.wg }); break;
