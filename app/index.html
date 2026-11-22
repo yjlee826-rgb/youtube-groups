@@ -16,7 +16,9 @@
 <script src="https://accounts.google.com/gsi/client" async></script>
 <style>
 :root{--bg:#14100F;--panel:#1B1413;--card:#261C1B;--ink:#F3ECE4;--sub:#C4B8AE;--line:#3A2C2B;--bur:#6A1022;--gold:#E4C47E;--gold-ink:#2A0A12;--onbur:#EBD3B5;--thumb:#4A3A37;--dot:#E4C47E}
-@media (prefers-color-scheme: light){:root{--bg:#FAF7F4;--panel:#F3ECE7;--card:#FFFFFF;--ink:#1E1416;--sub:#6B5E58;--line:#E6DCD5;--thumb:#E5D9D2;--dot:#C99A3A}}
+@media (prefers-color-scheme: light){:root:not([data-theme=dark]){--bg:#FAF7F4;--panel:#F3ECE7;--card:#FFFFFF;--ink:#1E1416;--sub:#6B5E58;--line:#E6DCD5;--thumb:#E5D9D2;--dot:#C99A3A}}
+:root[data-theme=light]{--bg:#FAF7F4;--panel:#F3ECE7;--card:#FFFFFF;--ink:#1E1416;--sub:#6B5E58;--line:#E6DCD5;--thumb:#E5D9D2;--dot:#C99A3A}
+.relog{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 20px);transform:translateX(-50%);background:var(--gold);color:var(--gold-ink);height:46px;padding:0 20px;border-radius:23px;font-size:15px;font-weight:700;z-index:5;box-shadow:0 4px 16px rgba(0,0,0,.3)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo",sans-serif;font-size:16px;overscroll-behavior:none}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
@@ -133,6 +135,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(LS(k))) ?? d; } catch { return d; } };
 const keep = (k, v) => { try { localStorage.setItem(LS(k), JSON.stringify(v)); } catch {} };
 const uid = () => Math.random().toString(36).slice(2, 10);
+const setTheme = t => { if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; };
+setTheme(load('theme', 'auto'));
 const ic = {
   back: '<svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>',
   sort: '<svg viewBox="0 0 24 24"><path d="M4 7h16M7 12h10M10 17h4"/></svg>',
@@ -147,6 +151,7 @@ let subs = load('subs', []);
 let extra = load('extra', {});
 let stats = load('stats', {});
 let pls = load('pls', []);
+let plItems = {};
 let want = {};
 let latest = load('latest', {});
 let data = load('data', null);
@@ -205,10 +210,13 @@ function auth(prompt) {
     client.requestAccessToken({ prompt });
   });
 }
-async function api(url, opt = {}) {
-  if (!token || Date.now() > tokenExp) throw 'auth';
+// 토큰은 1시간짜리라, 끊기기 전에 화면 없이 조용히 다시 받아 옴
+let refreshing = null, authNeeded = false;
+const silent = () => refreshing ||= auth('').then(() => { authNeeded = false; keep('acct', 1); }).finally(() => { refreshing = null; });
+async function api(url, opt = {}, retry = true) {
+  if (!token || Date.now() > tokenExp) { try { await silent(); } catch { throw 'auth'; } }
   const r = await fetch(url, { ...opt, headers: { Authorization: 'Bearer ' + token, ...(opt.headers || {}) } });
-  if (r.status === 401) { token = null; throw 'auth'; }
+  if (r.status === 401) { token = null; if (retry) return api(url, opt, false); throw 'auth'; }
   if (!r.ok) throw r.status;
   return r.status === 204 ? null : r.json();
 }
@@ -278,6 +286,22 @@ async function loadPls() {
   } while (page);
   pls = out; keep('pls', pls);
 }
+async function loadItems(pid, force) {
+  const c = plItems[pid];
+  if (!force && c && Date.now() - c.at < 10 * 60000) return;
+  let out = [], page = '';
+  do {
+    const d = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=${pid}` + (page ? '&pageToken=' + page : ''));
+    out = out.concat(d.items.filter(i => i.snippet.thumbnails && Object.keys(i.snippet.thumbnails).length).map(i => ({ pi: i.id, vid: i.contentDetails.videoId, title: i.snippet.title, ch: (i.snippet.videoOwnerChannelTitle || '').replace(/ - Topic$/, ''), thumb: i.snippet.thumbnails.medium?.url || i.snippet.thumbnails.default?.url || '' })));
+    page = d.nextPageToken || '';
+  } while (page);
+  plItems[pid] = { at: Date.now(), items: out };
+}
+function showPl(pid) {
+  go({ name: 'plv', id: pid, ps: view.ps });
+  if (!plItems[pid]) render();
+  loadItems(pid).then(() => { if (view.id === pid) render(); }).catch(e => e === 'auth' ? needAuth() : toast('불러오기 실패'));
+}
 async function loadStats() {
   // 구독자 수 + 쇼츠 포함 마지막 업로드(UU 재생목록), 하루 캐시
   const need = known().map(s => s.id).filter(id => !stats[id] || Date.now() - stats[id].at > 86400000);
@@ -330,14 +354,15 @@ function applyImport() {
 }
 
 /* ---------- 시작 ---------- */
-function needAuth() { view = { name: 'auth' }; render(); }
+// 연결이 끊겨도 저장된 목록은 그대로 보여 주고, 아래에 '다시 연결' 버튼만 띄움
+function needAuth() { authNeeded = true; if (!data) view = { name: 'auth' }; render(); }
 async function start() {
   const t = load('tok', null);
   if (t && t.scope === SCOPES && Date.now() < t.tokenExp) { token = t.token; tokenExp = t.tokenExp; }
   if (data) render(); else { view = { name: 'loading' }; render(); }
   if (!token) {
     await waitGis();
-    try { await auth(''); } catch { return needAuth(); }
+    try { await silent(); } catch { return needAuth(); }
   }
   await sync();
 }
@@ -357,7 +382,7 @@ async function sync() {
     await loadLatest(false);
   } catch (e) { if (e === 'auth') needAuth(); else toast('불러오기 실패'); }
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && token && Date.now() < tokenExp) loadLatest(false).catch(() => {}); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && data) loadLatest(false).then(render).catch(e => e === 'auth' && needAuth()); });
 
 /* ---------- 동작 ---------- */
 function openChannel(id) {
@@ -385,6 +410,15 @@ function chMenu(id) {
 }
 const vidOf = x => (String(x).match(/(?:[?&]v=|youtu\.be\/|shorts\/|live\/|embed\/)([\w-]{11})/) || String(x).trim().match(/^([\w-]{11})$/) || [])[1];
 function openPl(id) { location.href = `https://music.youtube.com/playlist?list=${id}`; }
+function playTrack(pid, vid) { location.href = `https://music.youtube.com/watch?v=${vid}&list=${pid}`; }
+function itemMenu(pid, vid, pi) {
+  const it = plItems[pid]?.items.find(x => x.pi === pi); if (!it) return;
+  choose(it.title, [['play', '재생'], ['add', '다른 재생목록에도 넣기'], ['rm', '이 재생목록에서 빼기', 'danger']], '', async v => {
+    if (v === 'play') playTrack(pid, vid);
+    if (v === 'add') addDlg('https://youtu.be/' + vid);
+    if (v === 'rm') removeTrack(pid, pi);
+  });
+}
 function plSections() {
   const gs = data.pl.groups, inG = new Set(gs.flatMap(g => g.pl)), by = id => pls.find(p => p.id === id);
   const out = gs.map(g => ({ key: g.id, g, name: g.name, list: g.pl.map(by).filter(Boolean) }));
@@ -402,7 +436,7 @@ function plMove(id) {
 }
 function plMenu(id) {
   const p = pls.find(x => x.id === id); if (!p) return;
-  choose(p.title, [['open', '뮤직 앱에서 열기'], ['move', '그룹 옮기기'], ['add', '영상 넣기']], '', v => {
+  choose(p.title, [['move', '그룹 옮기기'], ['add', '영상 넣기'], ['open', '뮤직 앱에서 재생목록 열기']], '', v => {
     if (v === 'open') openPl(id); if (v === 'move') plMove(id); if (v === 'add') addDlg('', id);
   });
 }
@@ -437,12 +471,13 @@ async function addTo(v, ids) {
       const c = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=id&maxResults=1&playlistId=${id}&videoId=${v}`);
       if (c.items?.length) { dup++; continue; }
       await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) });
-      const p = pls.find(x => x.id === id); if (p) p.count++; ok++;
+      const p = pls.find(x => x.id === id); if (p) p.count++; delete plItems[id]; ok++;
     } catch (e) { if (e === 'auth') return needAuth(); return toast(e === 404 ? '영상을 찾을 수 없습니다' : '넣기 실패'); }
   }
   keep('pls', pls); render();
   toast(ok ? `${ok}곳에 넣었습니다${dup ? ` · ${dup}곳은 이미 있음` : ''}` : '이미 들어 있습니다');
 }
+function themeDlg() { choose('화면 테마', [['auto', '기기 설정 따르기'], ['light', '밝게'], ['dark', '어둡게']], load('theme', 'auto'), v => { keep('theme', v); setTheme(v); }); }
 function go(v) { view = v; sel.clear(); pick.clear(); render(); document.querySelector('.main, .feed')?.scrollTo(0, 0); }
 function ask(title, value, ok) {
   const d = document.createElement('div'); d.className = 'dlg';
@@ -485,6 +520,34 @@ const freshList = () => known().filter(s => isNew(s.id)).sort((a, b) => latest[b
 const tabs = t => `<div class="tabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const railTabs = t => `<div class="rtabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const plRow = p => `<button class="item" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">영상 ${p.count}개</span></span></button>`;
+const trackRow = (pid, it, i, n) => view.edit
+  ? `<div class="item"><span class="pthumb" style="background-image:url('${esc(it.thumb)}')"></span><span class="body"><span class="name">${esc(it.title)}</span><span class="vs">${esc(it.ch)}</span></span><span class="mv"><button data-tu="${i}" aria-label="위로" ${i ? '' : 'disabled style="opacity:.25"'}>${ic.up}</button><button data-td="${i}" aria-label="아래로" ${i < n - 1 ? '' : 'disabled style="opacity:.25"'}>${ic.down}</button><button data-tx="${i}" aria-label="빼기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span></div>`
+  : `<button class="item" data-mv="${it.vid}" data-pi="${it.pi}" data-pid="${pid}"><span class="pthumb" style="background-image:url('${esc(it.thumb)}')"></span><span class="body"><span class="name">${esc(it.title)}</span><span class="vs">${esc(it.ch)}</span></span></button>`;
+const trackList = pid => { const c = plItems[pid]; return !c ? '<div class="center"><span class="vs">불러오는 중</span></div>' : c.items.length ? c.items.map((it, i) => trackRow(pid, it, i, c.items.length)).join('') : '<div class="center"><span class="vs">비어 있습니다</span></div>'; };
+async function moveTrack(pid, i, j) {
+  const a = plItems[pid].items; const it = a[i];
+  try {
+    await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: it.pi, snippet: { playlistId: pid, resourceId: { kind: 'youtube#video', videoId: it.vid }, position: j } }) });
+    a.splice(i, 1); a.splice(j, 0, it); render();
+  } catch (e) { e === 'auth' ? needAuth() : toast('순서 바꾸기 실패'); }
+}
+async function removeTrack(pid, pi) {
+  try {
+    await api('https://www.googleapis.com/youtube/v3/playlistItems?id=' + pi, { method: 'DELETE' });
+    plItems[pid].items = plItems[pid].items.filter(x => x.pi !== pi);
+    const p = pls.find(x => x.id === pid); if (p) { p.count--; keep('pls', pls); }
+    render(); toast('뺐습니다');
+  } catch (e) { e === 'auth' ? needAuth() : toast('빼기 실패'); }
+}
+function plvView() {
+  const p = pls.find(x => x.id === view.id); if (!p) { view = { name: 'pl' }; return plView(); }
+  const first = plItems[p.id]?.items[0];
+  if (view.edit) return `<div class="head"><div class="row"><h1 style="font-size:20px">${esc(p.title)} 편집</h1><button class="pill" data-act="pledit">완료</button></div><div class="meta">화살표로 순서 바꾸기 · ✕로 빼기</div></div>
+  <div class="main">${trackList(p.id)}</div>`;
+  return `<div class="head"><div class="row"><button class="ib back" data-act="plback" aria-label="뒤로">${ic.back}</button><span style="flex:1"></span>${first ? `<button class="pill" data-act="plplay">전체 재생</button>` : ''}<button class="pill" data-act="pledit">편집</button><button class="ib" data-act="plmenu" aria-label="메뉴">${ic.more}</button></div>
+    <div class="row"><h1>${esc(p.title)}</h1></div><div class="meta">영상 ${p.count}개</div></div>
+  <div class="main">${trackList(p.id)}<button class="add" data-act="pladd" style="border-style:solid">영상 넣기</button></div>`;
+}
 function plView() {
   const secs = plSections();
   return `<div class="head"><div class="row"><h1>재생목록</h1><button class="ib" data-act="plnewgroup" aria-label="새 그룹"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><div class="meta">재생목록 ${pls.length}개</div>${tabs('pl')}</div>
@@ -496,7 +559,7 @@ function home() {
   const fresh = freshList();
   const un = unsorted();
   const gs = sortGroups(data.groups);
-  return `<div class="head"><div class="row"><h1>구독</h1><button class="ib" data-act="gsort" aria-label="정렬">${ic.sort}</button><button class="ib" data-act="reorder" aria-label="순서 편집">${ic.more}</button></div><div class="meta">그룹 ${data.groups.length}개 · 채널 ${subs.length}개</div>${tabs('sub')}</div>
+  return `<div class="head"><div class="row"><h1>구독</h1><button class="ib" data-act="gsort" aria-label="정렬">${ic.sort}</button><button class="ib" data-act="menu" aria-label="메뉴">${ic.more}</button></div><div class="meta">그룹 ${data.groups.length}개 · 채널 ${subs.length}개</div>${tabs('sub')}</div>
   <div class="main">
     ${fresh.length ? `<div class="sec"><h2>새로 올라온 영상</h2><span class="badge">${fresh.length}</span></div><div class="strip">${fresh.slice(0, 20).map(vCard).join('')}</div>` : ''}
     ${un.length ? `<button class="notice" data-act="organize" style="width:calc(100% - 36px)">미분류 채널 ${un.length}개<b>정리하기 ›</b></button>` : ''}
@@ -597,6 +660,14 @@ function plWide() {
   const secs = plSections();
   if (!secs.find(x => x.key === view.ps)) view.ps = secs[0]?.key;
   const cur = secs.find(x => x.key === view.ps) || { list: [], name: '' };
+  const sel = view.name === 'plv' ? pls.find(x => x.id === view.id) : null;
+  if (sel) return `<div class="wide"><div class="rail">${railTabs('pl')}
+      ${secs.map(x => `<button class="rg ${x.key === view.ps ? 'sel' : ''}" data-ps="${x.key}"><span>${esc(x.name)}</span><i style="font-weight:500">${x.list.length}</i></button>`).join('')}
+      <button class="rg" data-act="plnewgroup" style="opacity:.8">+ 새 그룹</button></div>
+    <div class="col"><div class="top"><h2>${esc(cur.name)}</h2><div class="vs" style="margin-top:4px">재생목록 ${cur.list.length}개</div></div>
+      <div class="list">${cur.list.map(p => `<button class="item ${p.id === sel.id ? 'sel' : ''}" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">영상 ${p.count}개</span></span></button>`).join('')}</div></div>
+    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(sel.title)}</h2>${plItems[sel.id]?.items.length ? '<button class="pill" data-act="plplay">전체 재생</button>' : ''}<button class="pill ${view.edit ? 'p' : ''}" data-act="pledit">${view.edit ? '완료' : '편집'}</button><button class="pill" data-act="plmenu">더보기</button><button class="pill p" data-act="pladd">영상 넣기</button></div>
+      <div style="max-width:760px">${trackList(sel.id)}</div></div></div>`;
   return `<div class="wide"><div class="rail">${railTabs('pl')}
       ${secs.map(x => `<button class="rg ${x.key === view.ps ? 'sel' : ''}" data-ps="${x.key}"><span>${esc(x.name)}</span><i style="font-weight:500">${x.list.length}</i></button>`).join('')}
       <button class="rg" data-act="plnewgroup" style="opacity:.8">+ 새 그룹</button></div>
@@ -604,7 +675,7 @@ function plWide() {
       <div class="grid">${cur.list.map(p => `<button class="vcard" data-pl="${p.id}" style="text-align:left"><span class="thumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="vt">${esc(p.title)}</span><span class="vs">영상 ${p.count}개</span></button>`).join('')}</div></div></div>`;
 }
 function wide() {
-  if (view.name === 'pl') return plWide();
+  if (view.name === 'pl' || view.name === 'plv') return plWide();
   const gs = sortGroups(data.groups);
   const un = unsorted();
   if (!view.wg) view.wg = gs[0]?.id || (un.length ? 'un' : null);
@@ -617,7 +688,7 @@ function wide() {
       ${un.length ? `<button class="rg un ${view.wg === 'un' ? 'sel' : ''}" data-wg="un"><span>미분류</span><i>${un.length}</i></button>` : ''}
       ${gs.map(x => { const n = newCount(chOf(x)); return `<button class="rg ${x.id === view.wg ? 'sel' : ''}" data-wg="${x.id}"><span>${esc(x.name)}</span>${n ? `<i>${n}</i>` : ''}</button>`; }).join('')}
       <button class="rg" data-act="newgroup" style="opacity:.8">+ 새 그룹</button>
-      <span style="flex:1"></span><button class="rg" data-act="review">구독 정리</button>
+      <span style="flex:1"></span><button class="rg" data-act="review">구독 정리</button><button class="rg" data-act="theme">화면 테마</button>
     </div>
     <div class="col"><div class="top"><h2>${esc(title)}</h2><div class="vs" style="margin-top:4px">채널 ${list.length}개</div></div>
       <div class="list">${list.map(s => chRow(s)).join('')}</div></div>
@@ -635,15 +706,15 @@ function render() {
   if (view.name === 'auth') { $app.innerHTML = center('<button class="btn p" data-act="login">계속</button>'); return; }
   if (!data) return;
   data.pl ||= { groups: [] };
-  const narrow = { home, group: groupView, organize, reorder, review, pl: plView }[view.name]?.() || home();
-  const showWide = view.name === 'home' || view.name === 'group' || view.name === 'pl';
-  $app.innerHTML = showWide ? `<div class="narrow app">${narrow}</div>${wide()}` : `<div class="app ${view.name === 'review' ? 'rv' : ''}">${narrow}</div>`;
+  const narrow = { home, group: groupView, organize, reorder, review, pl: plView, plv: plvView }[view.name]?.() || home();
+  const showWide = view.name === 'home' || view.name === 'group' || view.name === 'pl' || view.name === 'plv';
+  $app.innerHTML = (showWide ? `<div class="narrow app">${narrow}</div>${wide()}` : `<div class="app ${view.name === 'review' ? 'rv' : ''}">${narrow}</div>`) + (authNeeded ? '<button class="relog" data-act="login">다시 연결</button>' : '');
 }
 
 /* ---------- 입력 ---------- */
 let press = null, pressed = false;
-const lpT = e => e.target.closest('[data-ch],[data-pl],[data-vid]');
-const lpRun = t => t.dataset.ch ? chMenu(t.dataset.ch) : t.dataset.pl ? plMenu(t.dataset.pl) : addDlg('https://youtu.be/' + t.dataset.vid);
+const lpT = e => e.target.closest('[data-ch],[data-pl],[data-vid],[data-mv]');
+const lpRun = t => t.dataset.mv ? itemMenu(t.dataset.pid, t.dataset.mv, t.dataset.pi) : t.dataset.ch ? chMenu(t.dataset.ch) : t.dataset.pl ? plMenu(t.dataset.pl) : addDlg('https://youtu.be/' + t.dataset.vid);
 $app.addEventListener('pointerdown', e => { const t = lpT(e); pressed = false; if (!t) return; press = setTimeout(() => { pressed = true; lpRun(t); }, 500); });
 ['pointerup', 'pointercancel', 'pointermove'].forEach(k => $app.addEventListener(k, e => { if (k !== 'pointermove' || Math.abs(e.movementX) + Math.abs(e.movementY) > 4) clearTimeout(press); }));
 $app.addEventListener('contextmenu', e => { const t = lpT(e); if (t) { e.preventDefault(); clearTimeout(press); if (!pressed) { pressed = true; lpRun(t); } } });
@@ -652,9 +723,12 @@ $app.addEventListener('click', e => {
   const t = e.target.closest('button,[data-ch]'); if (!t) return;
   const d = t.dataset;
   if (d.ch) return openChannel(d.ch);
-  if (d.pl) return openPl(d.pl);
+  if (d.mv) return playTrack(d.pid, d.mv);
+  if (d.tu || d.td) { const i = +(d.tu ?? d.td); return moveTrack(view.id, i, d.tu ? i - 1 : i + 1); }
+  if (d.tx) { const it = plItems[view.id].items[+d.tx]; return choose(it.title, [['rm', '이 재생목록에서 빼기', 'danger']], '', () => removeTrack(view.id, it.pi)); }
+  if (d.pl) return showPl(d.pl);
   if (d.plg) return plGroupMenu(d.plg);
-  if (d.ps) { view.ps = d.ps; return render(); }
+  if (d.ps) { view.ps = d.ps; if (view.name === 'plv') view.name = 'pl'; return render(); }
   if (d.v) return openVideo(d.v, d.vid);
   if (d.g) return go({ name: 'group', id: d.g });
   if (d.wg) { view.wg = d.wg; view.id = d.wg; return render(); }
@@ -668,16 +742,26 @@ $app.addEventListener('click', e => {
   if (d.up || d.dn) { const i = +(d.up ?? d.dn), j = d.up ? i - 1 : i + 1; [data.groups[i], data.groups[j]] = [data.groups[j], data.groups[i]]; data.sort.groups = 'manual'; save(); return render(); }
   const cur = () => data.groups.find(x => x.id === (view.name === 'group' ? view.id : view.wg));
   switch (d.act) {
-    case 'login': auth('select_account').then(sync).catch(() => toast('로그인 실패')); break;
+    case 'login': auth(load('acct', 0) ? '' : 'select_account').then(() => { authNeeded = false; keep('acct', 1); return sync(); }).catch(() => toast('로그인 실패')); break;
     case 'home': go({ name: 'home', wg: view.wg }); break;
     case 'backg': go({ name: 'group', id: view.gid }); break;
     case 'gsort': choose('그룹 정렬', groupSorts, data.sort.groups, v => { data.sort.groups = v; save(); render(); }); break;
     case 'csort': choose('채널 정렬', chSorts, data.sort.channels, v => { data.sort.channels = v; save(); render(); }); break;
     case 'reorder': go({ name: 'reorder' }); break;
     case 'tab-sub': go({ name: 'home' }); break;
+    case 'menu': choose('메뉴', [['reorder', '그룹 순서'], ['review', '구독 정리'], ['theme', '화면 테마']], '', v => {
+      if (v === 'reorder') go({ name: 'reorder' });
+      if (v === 'review') { want = {}; go({ name: 'review' }); loadStats().catch(() => {}); }
+      if (v === 'theme') themeDlg();
+    }); break;
+    case 'theme': themeDlg(); break;
     case 'tab-pl': go({ name: 'pl', ps: view.ps }); if (!pls.length) loadPls().then(render).catch(() => {}); break;
+    case 'plback': go({ name: 'pl', ps: view.ps }); break;
+    case 'pledit': view.edit = !view.edit; render(); break;
+    case 'plplay': { const f = plItems[view.id]?.items[0]; if (f) playTrack(view.id, f.vid); break; }
+    case 'plmenu': plMenu(view.id); break;
     case 'plnewgroup': ask('새 그룹', '', n => { data.pl.groups.push({ id: uid(), name: n, pl: [] }); save(); render(); }); break;
-    case 'pladd': addDlg(''); break;
+    case 'pladd': addDlg('', view.name === 'plv' ? view.id : null); break;
     case 'review': want = {}; go({ name: 'review' }); loadStats().catch(() => {}); break;
     case 'rvexit': if (Object.keys(want).length) { choose('바꾼 내용을 버릴까요?', [['y', '버리고 나가기', 'danger'], ['n', '계속 정리']], '', v => { if (v === 'y') { want = {}; go({ name: 'home' }); } }); } else go({ name: 'home' }); break;
     case 'rvreset': want = {}; render(); break;
