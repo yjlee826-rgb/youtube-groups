@@ -64,7 +64,7 @@ a{color:inherit;text-decoration:none}
 .sheet{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);border-radius:20px 20px 0 0;padding:18px 18px calc(env(safe-area-inset-bottom) + 18px)}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 14px;max-height:30vh;overflow-y:auto}
 .chip{height:40px;padding:0 14px;border-radius:20px;border:1px solid var(--line);font-size:15px;font-weight:500}
-.chip.on{background:var(--bur);border-color:var(--gold);color:#F3ECE4;font-weight:700}
+.chip.on{background:var(--gold);border-color:var(--gold);color:var(--gold-ink);font-weight:700}
 .btns{display:flex;gap:10px}
 .btn{flex:1;height:52px;border-radius:14px;font-size:16px;font-weight:700}
 .btn.p{background:var(--gold);color:var(--gold-ink)}
@@ -116,7 +116,10 @@ button.sec{width:100%;text-align:left}
 .ichk{width:24px;height:24px;border-radius:12px;border:2px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center}
 .ichk svg{width:14px;height:14px;stroke:var(--gold-ink);stroke-width:3;fill:none;display:none}
 .on .ichk{background:var(--gold);border-color:var(--gold)}.on .ichk svg{display:block}
-.paste{height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--line);font-size:14px;color:var(--sub);align-self:flex-end;margin-top:-4px}
+.fl{font-size:13px;color:var(--sub);margin:6px 0 -4px}
+.gtags{display:inline-flex;gap:4px;margin-left:8px;vertical-align:1px}
+.gtags i{font-style:normal;font-size:12px;font-weight:600;color:var(--dot);border:1px solid color-mix(in srgb,var(--gold) 55%,transparent);border-radius:6px;padding:0 6px;line-height:18px}
+.gtags i.none{color:var(--sub);border-color:var(--line)}
 .deck{display:flex;flex-direction:column;height:100%}
 .cols{flex:1;display:flex;gap:12px;overflow-x:auto;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px);scroll-snap-type:x proximity}
 .dcol{flex:none;width:330px;display:flex;flex-direction:column;background:var(--panel);border-radius:14px;overflow:hidden;scroll-snap-align:start}
@@ -243,7 +246,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23p';
+const VER = '2026-11-23r';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -549,8 +552,11 @@ async function loadPls() {
     out = out.concat(d.items.map(p => ({ id: p.id, title: p.snippet.title, thumb: p.snippet.thumbnails?.medium?.url || p.snippet.thumbnails?.default?.url || '', count: p.contentDetails.itemCount })));
     page = d.nextPageToken || '';
   } while (page);
-  pls = out; keep('pls', pls);
+  pls = out; keep('pls', pls); plsAt = Date.now();
 }
+let plsAt = 0;
+// 뮤직 앱에서 바꾼 내용도 보이게: 재생목록 화면을 열거나 앱으로 돌아올 때마다 뒤에서 새로 받음 (1분에 한 번까지)
+const refreshPls = () => { if (Date.now() - plsAt > 60000) loadPls().then(render).catch(e => { if (e === 'auth') needAuth(); }); };
 async function loadItems(pid, force) {
   const c = plItems[pid];
   if (!force && c && Date.now() - c.at < 10 * 60000) return;
@@ -575,7 +581,7 @@ function refreshPlv() { if (view.name !== 'plv') return; const id = view.id; loa
 function showPl(pid) {
   go({ name: 'plv', id: pid, ps: view.ps });
   if (!plItems[pid]) render();
-  loadItems(pid).then(() => { if (view.id === pid) render(); }).catch(e => e === 'auth' ? needAuth() : toast('불러오기 실패'));
+  loadItems(pid, true).then(() => { const p = pls.find(x => x.id === pid); if (p && plItems[pid]) { p.count = plItems[pid].items.length; keep('pls', pls); } if (view.id === pid) render(); }).catch(e => e === 'auth' ? needAuth() : toast('불러오기 실패'));
 }
 async function loadStats() {
   // 구독자 수 + 쇼츠 포함 마지막 업로드(UU 재생목록), 하루 캐시
@@ -679,6 +685,7 @@ async function sync(full = true) {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') return flush();
   if (!data) return;
+  if (view.name === 'plv') { stale(view.id); refreshPlv(); } else if (view.name === 'pl') refreshPls();
   if (Date.now() - fullAt > 300000) sync(true);
   else if (Date.now() - syncedAt > 60000) sync(false);
   else { if (dirty) driveSave().catch(() => {}); loadLatest(false).then(render).catch(e => e === 'auth' && needAuth()); }
@@ -715,7 +722,7 @@ async function toggleSub(id, track) {
 function vidMenu(ch, vid) {
   const v = vidsOf(ch).find(x => x.vid === vid); if (!v) return;
   const w = !!data.watched[vid] || !isNewV(ch, v);
-  choose(v.title, [['add', '재생목록에 넣기'], ['w', w ? '안 본 것으로 표시' : '봤음으로 표시'], ['ch', '채널로 가기']], '', k => {
+  choose(v.title, [['add', '재생목록에 추가'], ['w', w ? '안 본 것으로 표시' : '봤음으로 표시'], ['ch', '채널로 가기']], '', k => {
     if (k === 'add') addDlg('https://youtu.be/' + vid);
     if (k === 'w') { if (w) { delete data.watched[vid]; if ((data.seen[ch] || 0) >= v.t) data.seen[ch] = v.t - 1; } else data.watched[vid] = Date.now(); save(1); render(); }
     if (k === 'ch') openChannel(ch);
@@ -736,7 +743,7 @@ function openPl(id) { openUrl(`https://music.youtube.com/playlist?list=${id}`); 
 function playTrack(pid, vid) { openUrl(`https://music.youtube.com/watch?v=${vid}&list=${pid}`); }
 function itemMenu(pid, vid, pi) {
   const it = plItems[pid]?.items.find(x => x.pi === pi); if (!it) return;
-  choose(it.title, [['play', '유튜브 뮤직에서 재생'], ['yt', '유튜브에서 보기'], ['add', '다른 재생목록에도 넣기'], ['rm', '이 재생목록에서 빼기', 'danger']], '', async v => {
+  choose(it.title, [['play', '유튜브 뮤직에서 재생'], ['yt', '유튜브에서 보기'], ['add', '다른 재생목록에도 추가'], ['rm', '이 재생목록에서 빼기', 'danger']], '', async v => {
     if (v === 'play') playTrack(pid, vid);
     if (v === 'yt') openUrl(`https://www.youtube.com/watch?v=${vid}&list=${pid}`);
     if (v === 'add') addDlg('https://youtu.be/' + vid);
@@ -760,7 +767,7 @@ function plMove(id) {
 }
 function plMenu(id) {
   const p = pls.find(x => x.id === id); if (!p) return;
-  choose(p.title, [['move', '그룹 옮기기'], ['add', '링크로 넣기'], ['rename', '이름 바꾸기'], ['open', '뮤직 앱에서 열기'], ['del', '재생목록 삭제', 'danger']], '', v => {
+  choose(p.title, [['move', '그룹 옮기기'], ['add', '링크로 추가'], ['rename', '이름 바꾸기'], ['open', '뮤직 앱에서 열기'], ['del', '재생목록 삭제', 'danger']], '', v => {
     if (v === 'open') openPl(id); if (v === 'move') plMove(id); if (v === 'add') addDlg('', id);
     if (v === 'rename') ask('재생목록 이름', p.title, async n => {
       try { await api('https://www.googleapis.com/youtube/v3/playlists?part=snippet', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, snippet: { title: n } }) }); p.title = n; keep('pls', pls); render(); }
@@ -795,24 +802,27 @@ function plGroupMenu(gid) {
 }
 function addDlg(url, pre) {
   const d = document.createElement('div'); d.className = 'dlg top';
-  const picked = new Set(pre ? [pre] : []);
-  const draw = () => { const v = d.querySelector('input')?.value ?? url;
-    d.innerHTML = `<div class="box"><b style="font-size:17px">재생목록에 넣기</b><input placeholder="곡·영상·앨범 링크" value="${esc(v)}" inputmode="url">${navigator.clipboard?.readText ? '<button class="paste" data-x="paste">붙여넣기</button>' : ''}<div class="chips">${pls.map(p => `<button class="chip ${picked.has(p.id) ? 'on' : ''}" data-pk="${p.id}">${esc(p.title)}</button>`).join('')}<button class="chip" data-x="new" style="border-style:dashed;color:var(--sub)">새 재생목록</button></div><div class="btns"><button class="btn s" data-x="c">취소</button><button class="btn p" data-x="ok" ${picked.size ? '' : 'disabled'}>넣기</button></div></div>`; };
-  draw(); document.body.append(d);
+  const last = load('lastpl', null), first = pre || (pls.length === 1 ? pls[0].id : pls.some(p => p.id === last) ? last : null);
+  const picked = new Set(first ? [first] : []);
+  d.innerHTML = `<div class="box"><b style="font-size:17px">재생목록에 곡 추가</b><span class="fl">링크</span><input placeholder="곡·앨범 링크를 붙여넣으세요" value="${esc(url || '')}" inputmode="url"><span class="fl">추가할 재생목록</span><div class="chips">${pls.map(p => `<button class="chip ${picked.has(p.id) ? 'on' : ''}" data-pk="${p.id}">${esc(p.title)}</button>`).join('')}<button class="chip" data-x="new" style="border-style:dashed;color:var(--sub)">새 재생목록</button></div><div class="btns"><button class="btn s" data-x="c">취소</button><button class="btn p" data-x="ok"></button></div></div>`;
+  const okb = d.querySelector('[data-x="ok"]');
+  const sync = () => { okb.disabled = !picked.size; okb.textContent = picked.size ? '추가' : '재생목록을 고르세요'; };
+  sync(); document.body.append(d);
   if (!url) d.querySelector('input').focus();
   d.onclick = e => {
     if (e.target === d) return d.remove();
     const k = e.target.closest('[data-pk]');
-    if (k) { picked.has(k.dataset.pk) ? picked.delete(k.dataset.pk) : picked.add(k.dataset.pk); return draw(); }
+    if (k) { picked.has(k.dataset.pk) ? picked.delete(k.dataset.pk) : picked.add(k.dataset.pk); k.classList.toggle('on', picked.has(k.dataset.pk)); return sync(); }   // 다시 그리지 않아 키보드가 닫히지 않음
     const x = e.target.closest('[data-x]')?.dataset.x;
     if (x === 'c') d.remove();
-    if (x === 'paste') navigator.clipboard.readText().then(t => { d.querySelector('input').value = (t.match(/https?:\/\/\S+/) || [t])[0]; }).catch(() => toast('붙여넣기를 허용해 주세요'));
     if (x === 'new') { const u = d.querySelector('input').value; d.remove(); newPl(id => addDlg(u, id)); }
     if (x === 'ok') {
-      const u = d.querySelector('input').value, v = vidOf(u), l = listOf(u);
+      const u = d.querySelector('input').value.trim(), v = vidOf(u), l = listOf(u);
+      if (!u) return toast('링크를 붙여넣어 주세요');
+      if (v || l) keep('lastpl', [...picked][0]);
       if (v) { d.remove(); return addTo(v, [...picked]); }            // 곡·영상 하나 (재생목록 안에서 공유한 곡도 곡 하나로)
       if (l) { d.remove(); return addList(l, [...picked]); }           // 앨범·재생목록 통째로
-      toast(/browse\/MPRE/.test(u) ? '앨범의 공유 버튼으로 복사한 링크를 넣어 주세요' : '링크를 확인해 주세요');
+      toast(/browse\/MPRE/.test(u) ? '앨범의 공유 버튼으로 복사한 링크를 붙여넣어 주세요' : '곡·앨범 링크가 아닙니다. 링크를 확인해 주세요');
     }
   };
 }
@@ -833,13 +843,13 @@ async function addList(listId, ids) {
       try {
         await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) });
         have.add(v); ok++; const p = pls.find(x => x.id === id); if (p) p.count++;
-        if (ok % 5 === 0) toast(`넣는 중 ${ok}곡`);
-      } catch (e) { if (e === 'auth') return needAuth(); keep('pls', pls); stale(id); render(); refreshPlv(); return toast(`${ok}곡 넣고 멈췄습니다${e === 403 ? ' (오늘 한도)' : ''}`); }
+        if (ok % 5 === 0) toast(`추가하는 중 ${ok}곡`);
+      } catch (e) { if (e === 'auth') return needAuth(); keep('pls', pls); stale(id); render(); refreshPlv(); return toast(`${ok}곡 추가하고 멈췄습니다${e === 403 ? ' (오늘 한도)' : ''}`); }
     }
     stale(id);
   }
   keep('pls', pls); render(); refreshPlv();
-  toast(ok ? `${ok}곡 넣었습니다${dup ? ` · ${dup}곡은 이미 있음` : ''}` : '이미 모두 들어 있습니다');
+  toast(ok ? `${ok}곡 추가했습니다${dup ? ` · ${dup}곡은 이미 있음` : ''}` : '이미 모두 들어 있습니다');
 }
 async function addTo(v, ids) {
   let ok = 0, dup = 0;
@@ -849,10 +859,10 @@ async function addTo(v, ids) {
       if (c.items?.length) { dup++; continue; }
       await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) });
       const p = pls.find(x => x.id === id); if (p) p.count++; stale(id); ok++;
-    } catch (e) { if (e === 'auth') return needAuth(); return toast(e === 404 ? '영상을 찾을 수 없습니다' : '넣기 실패'); }
+    } catch (e) { if (e === 'auth') return needAuth(); return toast(e === 404 ? '영상을 찾을 수 없습니다' : '추가 실패'); }
   }
   keep('pls', pls); render(); refreshPlv();
-  toast(ok ? `${ok}곳에 넣었습니다${dup ? ` · ${dup}곳은 이미 있음` : ''}` : '이미 들어 있습니다');
+  toast(ok ? `${ok}곳에 추가했습니다${dup ? ` · ${dup}곳은 이미 있음` : ''}` : '이미 들어 있습니다');
 }
 function themeDlg() { choose('화면 테마', [['auto', '기기 설정 따르기'], ['light', '밝게'], ['dark', '어둡게']], load('theme', 'auto'), v => { keep('theme', v); setTheme(v); }); }
 const TOP = ['home', 'subs', 'pl', 'more'];
@@ -882,12 +892,13 @@ const chSorts = [['recent', '최근 업로드 순'], ['name', '이름순'], ['ma
 const label = (list, v) => list.find(x => x[0] === v)[1];
 
 /* ---------- 화면 조각 ---------- */
-const chRow = (s, attr = '') => {
-  const l = latest[s.id] || {};
+const groupsOf = id => data.groups.filter(g => g.ch.includes(id)).map(g => g.name);
+const chRow = (s, attr = '', showG = false) => {
+  const l = latest[s.id] || {}, gn = showG ? groupsOf(s.id) : null;
   const n = isNew(s.id);
   return `<button class="item ${n ? 'new' : ''} ${s.off ? 'off' : ''}" data-ch="${s.id}" ${attr}>
     <span class="av" style="background-image:url('${esc(s.thumb)}')"></span>
-    <span class="body"><span class="name">${curGroup()?.pin?.includes(s.id) && ['group', 'subs'].includes(view.name) ? pinIc : ''}${esc(s.title)}</span><span class="vs">${s.off ? '구독 안 함 · ' : ''}${l.title ? esc(l.title) + ' · ' + ago(l.t) : (l.at ? '영상 없음' : '')}</span></span>
+    <span class="body"><span class="name">${curGroup()?.pin?.includes(s.id) && ['group', 'subs'].includes(view.name) ? pinIc : ''}${esc(s.title)}${gn ? `<span class="gtags">${gn.length ? gn.map(n => `<i>${esc(n)}</i>`).join('') : '<i class="none">그룹 없음</i>'}</span>` : ''}</span><span class="vs">${s.off ? '구독 안 함 · ' : ''}${l.title ? esc(l.title) + ' · ' + ago(l.t) : (l.at ? '영상 없음' : '')}</span></span>
     ${n ? `<span class="badge" aria-label="새 영상">${newVids(s.id).length}</span>` : ''}</button>`;
 };
 const nd = v => isNewV(v.ch, v) ? '<span class="nd"></span>' : '';
@@ -954,14 +965,14 @@ function plvView() {
   <div class="main" style="padding-bottom:0">${trackList(p.id)}${bulkBar()}</div>`;
   return `<div class="head"><div class="row"><button class="ib back" data-act="plback" aria-label="뒤로">${ic.back}</button><span style="flex:1"></span>${first ? `<button class="pill" data-act="plplay">전체 재생</button>` : ''}<button class="pill" data-act="pledit">편집</button><button class="ib" data-act="plmenu" aria-label="메뉴">${ic.more}</button></div>
     <div class="row"><h1>${esc(p.title)}</h1></div><div class="meta">${plMeta(p)} · 누르면 유튜브 뮤직에서 재생</div></div>
-  <div class="main">${trackList(p.id)}<button class="add" data-act="pladd" style="border-style:solid">링크로 넣기</button></div>`;
+  <div class="main">${trackList(p.id)}<button class="add" data-act="pladd" style="border-style:solid">링크로 추가</button></div>`;
 }
 function plView() {
   const secs = plSections();
   return `<div class="head"><div class="row"><h1>재생목록</h1><button class="pill" data-act="pladdmenu">새로 만들기</button></div><div class="meta">재생목록 ${pls.length}개 · 곡을 누르면 유튜브 뮤직에서 재생</div></div>
   <div class="main">${secs.map(x => `${secs.length > 1 ? `<button class="sec" ${x.g ? `data-plg="${x.g.id}"` : ''}><h2>${esc(x.name)}</h2><span class="vs">${x.list.length}개</span></button>` : ''}${x.list.map(plRow).join('')}`).join('')}
     ${pls.length ? '' : '<div class="center"><span class="vs">재생목록이 없습니다</span></div>'}
-    <button class="add" data-act="pladd" style="border-style:solid">링크로 넣기</button></div>`;
+    <button class="add" data-act="pladd" style="border-style:solid">링크로 추가</button></div>`;
 }
 const groupCard = g => {
   const l = chOf(g), n = newCount(l), nv = new Set(l.filter(s => isNew(s.id)).map(s => s.id));
@@ -1081,7 +1092,7 @@ function searchRes(q) {
   q = q.trim().toLowerCase(); if (!q) return '<div class="center"><span class="vs">이름이나 제목 일부를 입력하세요</span></div>';
   const m = t => String(t).toLowerCase().includes(q), sec = (t, a) => a.length ? `<div class="sec"><h2>${t}</h2><span class="vs">${a.length}</span></div>${a.slice(0, 40).join('')}` : '';
   const gs = data.groups.filter(g => m(g.name)).map(g => `<button class="item" data-g="${g.id}"><span class="gav">${esc(g.name.slice(0, 1))}</span><span class="body"><span class="name">${esc(g.name)}</span><span class="vs">채널 ${chOf(g).length}개</span></span></button>`);
-  const cs = known().filter(s => m(s.title)).map(s => chRow(s));
+  const cs = known().filter(s => m(s.title)).map(s => chRow(s, '', true));
   const vs = feedOf(known()).filter(v => m(v.title)).map(vRow);
   const ps = pls.filter(p => m(p.title)).map(plRow);
   const tr = Object.entries(plItems).flatMap(([pid, c]) => c.items.filter(x => m(x.title)).map(it => trackRow(pid, it)));
@@ -1110,12 +1121,12 @@ function plWide() {
       <button class="rg" data-act="plnewgroup" style="opacity:.8">+ 새 그룹</button></div>
     <div class="col"><div class="top"><h2>${esc(cur.name)}</h2><div class="vs" style="margin-top:4px">재생목록 ${cur.list.length}개</div></div>
       <div class="list">${cur.list.map(p => `<button class="item ${p.id === sel.id ? 'sel' : ''}" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">${p.count}개</span></span></button>`).join('')}</div></div>
-    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(sel.title)}<div class="vs" style="font-size:14px;font-weight:400;margin-top:4px">${plMeta(sel)}</div></h2>${plItems[sel.id]?.items.length ? '<button class="pill" data-act="plplay">전체 재생</button>' : ''}<button class="pill ${view.edit ? 'p' : ''}" data-act="pledit">${view.edit ? '완료' : '편집'}</button><button class="pill" data-act="plmenu">더보기</button><button class="pill p" data-act="pladd">링크로 넣기</button></div>
+    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(sel.title)}<div class="vs" style="font-size:14px;font-weight:400;margin-top:4px">${plMeta(sel)}</div></h2>${plItems[sel.id]?.items.length ? '<button class="pill" data-act="plplay">전체 재생</button>' : ''}<button class="pill ${view.edit ? 'p' : ''}" data-act="pledit">${view.edit ? '완료' : '편집'}</button><button class="pill" data-act="plmenu">더보기</button><button class="pill p" data-act="pladd">링크로 추가</button></div>
       <div style="max-width:760px">${trackList(sel.id)}${bulkBar()}</div></div></div>`;
   return `<div class="wide"><div class="rail">${railNav()}<div class="rlabel">재생목록 그룹</div>
       ${secs.map(x => `<button class="rg ${x.key === view.ps ? 'sel' : ''}" data-ps="${x.key}"><span>${esc(x.name)}</span><i style="font-weight:500">${x.list.length}</i></button>`).join('')}
       <button class="rg" data-act="plnewgroup" style="opacity:.8">+ 새 그룹</button></div>
-    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(cur.name)}</h2><button class="pill" data-act="plnew">새 재생목록</button>${cur.g ? `<button class="pill" data-plg="${cur.g.id}">그룹 편집</button>` : ''}<button class="pill p" data-act="pladd">링크로 넣기</button></div>
+    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(cur.name)}</h2><button class="pill" data-act="plnew">새 재생목록</button>${cur.g ? `<button class="pill" data-plg="${cur.g.id}">그룹 편집</button>` : ''}<button class="pill p" data-act="pladd">링크로 추가</button></div>
       <div class="grid">${cur.list.map(p => `<button class="vcard" data-pl="${p.id}" style="text-align:left"><span class="thumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="vt">${esc(p.title)}</span><span class="vs">${p.count}개</span></button>`).join('')}</div></div></div>`;
 }
 function homeWide() {
@@ -1221,7 +1232,7 @@ $app.addEventListener('click', e => {
     case 'tab-sub': go({ name: 'subs', wg: view.wg }); break;
     case 'theme': themeDlg(); break;
     case 'wmfont': wmDlg(); break;
-    case 'pl': case 'tab-pl': go({ name: 'pl', ps: view.ps }); if (!pls.length) loadPls().then(render).catch(() => {}); break;
+    case 'pl': case 'tab-pl': go({ name: 'pl', ps: view.ps }); refreshPls(); break;
     case 'plback': go({ name: 'pl', ps: view.ps }); break;
     case 'pledit': view.edit = !view.edit; tsel.clear(); render(); break;
     case 'tselall': { const a = plItems[view.id]?.items || []; a.every(x => tsel.has(x.pi)) ? tsel.clear() : a.forEach(x => tsel.add(x.pi)); render(); break; }
