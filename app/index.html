@@ -256,10 +256,14 @@ async function loadExtra() {
   }
 }
 async function loadStats() {
-  const need = known().map(s => s.id).filter(id => !stats[id] || Date.now() - stats[id].at > 7 * 86400000);
+  // 구독자 수 + 쇼츠 포함 마지막 업로드(UU 재생목록), 하루 캐시
+  const need = known().map(s => s.id).filter(id => !stats[id] || Date.now() - stats[id].at > 86400000);
   for (let i = 0; i < need.length; i += 50) {
-    const d = await api('https://www.googleapis.com/youtube/v3/channels?part=statistics&maxResults=50&id=' + need.slice(i, i + 50).join(','));
-    (d.items || []).forEach(c => stats[c.id] = { n: +(c.statistics.subscriberCount || 0), at: Date.now() });
+    const part = need.slice(i, i + 50);
+    const d = await api('https://www.googleapis.com/youtube/v3/channels?part=statistics&maxResults=50&id=' + part.join(','));
+    const last = await Promise.all(part.map(id => api(`https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=1&playlistId=UU${id.slice(2)}`)
+      .then(x => Date.parse(x.items?.[0]?.contentDetails?.videoPublishedAt) || 0).catch(e => { if (e === 'auth') throw e; return 0; })));
+    part.forEach((id, k) => { const c = (d.items || []).find(x => x.id === id); stats[id] = { n: +(c?.statistics.subscriberCount || 0), last: last[k], at: Date.now() }; });
     keep('stats', stats); if (view.name === 'review') render();
   }
 }
@@ -436,14 +440,15 @@ function organize() {
     <div class="btns"><button class="btn p" data-act="put" ${sel.size && pick.size ? '' : 'disabled'}>넣기</button><button class="btn s" data-act="pull" ${sel.size && (pick.size || gid) ? '' : 'disabled'}>빼기</button></div></div></div>`;
 }
 const fmtN = n => '구독자 ' + new Intl.NumberFormat('ko', { notation: 'compact' }).format(n) + '명';
-const idle = id => { const l = latest[id]; return !!(l && l.at && (!l.t || Date.now() - l.t > 365 * 86400000)); };
+const lastUp = id => stats[id] ? stats[id].last : latest[id]?.t || 0; // 쇼츠 포함
+const idle = id => (stats[id] || latest[id]?.at) && Date.now() - lastUp(id) > 365 * 86400000;
 const isSub = id => subIds().has(id);
 const wants = id => id in want ? want[id] : isSub(id) ? true : null; // null = 미정
 function review() {
   const f = view.filter || 'all';
   const all = known();
   let list = f === 'idle' ? all.filter(s => idle(s.id)) : f === 'off' ? all.filter(s => !isSub(s.id)) : all;
-  list = [...list].sort((a, b) => (latest[a.id]?.t || 0) - (latest[b.id]?.t || 0));
+  list = [...list].sort((a, b) => lastUp(a.id) - lastUp(b.id));
   const add = all.filter(s => wants(s.id) === true && !isSub(s.id)).length, del = all.filter(s => wants(s.id) === false && isSub(s.id)).length;
   const out = all.filter(s => wants(s.id) === false && !isSub(s.id)).length;
   const kept = all.filter(s => wants(s.id) === true).length, undec = all.filter(s => wants(s.id) === null).length;
@@ -453,7 +458,7 @@ function review() {
     <div class="seg" style="padding:0 0 16px">${segs.map(x => `<button class="pill" data-f="${x[0]}" style="${x[0] === f ? 'background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:700' : ''}">${x[1]}</button>`).join('')}</div></div>
   <div class="main" style="padding-bottom:0">${list.map(s => { const l = latest[s.id] || {}; const k = wants(s.id); return `<button class="item ${k ? 'keep' : ''} ${s.id in want ? 'chg' : ''}" data-rv="${s.id}">
       <span class="av" style="background-image:url('${esc(s.thumb)}')"></span>
-      <span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${l.t ? ago(l.t) : l.at ? '영상 없음' : ''}${stats[s.id] ? ' · ' + fmtN(stats[s.id].n) : ''}</span></span>
+      <span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${lastUp(s.id) ? ago(lastUp(s.id)) : stats[s.id] || l.at ? '영상 없음' : ''}${stats[s.id] ? ' · ' + fmtN(stats[s.id].n) : ''}</span></span>
       <span class="tg" ${k === null ? 'style="border-style:dashed"' : ''}>${k ? '남김' : k === false ? '뺌' : '미정'}</span></button>`; }).join('') || '<div class="center"><span class="vs">해당 채널이 없습니다</span></div>'}
     ${add + del + out ? `<div class="sheet"><div class="btns"><button class="btn s" data-act="rvreset">되돌리기</button><button class="btn p" data-act="rvapply">적용${add ? ' · 구독 ' + add : ''}${del ? ' · 취소 ' + del : ''}${out ? ' · 제외 ' + out : ''}</button></div></div>` : ''}</div>`;
 }
