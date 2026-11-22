@@ -83,7 +83,9 @@ a{color:inherit;text-decoration:none}
 .opt.sel{background:var(--bur);color:#F3ECE4;font-weight:700}
 .danger{color:#E88A9A}
 .tg{display:inline-flex;align-items:center;justify-content:center;height:34px;min-width:60px;padding:0 12px;border-radius:17px;border:1px solid var(--line);font-size:14px;font-weight:600;color:var(--sub);flex:none}
-.keep .tg{background:var(--gold);border-color:var(--gold);color:var(--gold-ink)}
+.tg.keep{background:var(--gold);border-color:var(--gold);color:var(--gold-ink)}
+.tg.un{color:#E88A9A;border-color:rgba(232,138,154,.5)}
+.off .tg{opacity:1}
 .chg .name::after{content:' •';color:var(--gold)}
 .rv .main{max-width:760px;width:100%;margin:0 auto}
 .rv .head>*{max-width:724px;margin-left:auto;margin-right:auto}
@@ -152,7 +154,6 @@ let extra = load('extra', {});
 let stats = load('stats', {});
 let pls = load('pls', []);
 let plItems = {};
-let want = {};
 let latest = load('latest', {});
 let data = load('data', null);
 let fileId = load('fileId', null);
@@ -394,9 +395,25 @@ function openVideo(id, vid) {
   data.seen[id] = Date.now(); save();
   location.href = `https://www.youtube.com/watch?v=${vid}`;
 }
+let busy = new Set(), dropped = new Set();
+async function toggleSub(id) {
+  const s = subOf(id); if (!s || busy.has(id)) return;
+  busy.add(id); render();
+  try {
+    if (s.off) {
+      const r = await api('https://www.googleapis.com/youtube/v3/subscriptions?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { resourceId: { kind: 'youtube#channel', channelId: id } } }) });
+      subs.push({ id, sid: r.id, title: s.title, thumb: s.thumb }); dropped.delete(id);
+    } else {
+      await api('https://www.googleapis.com/youtube/v3/subscriptions?id=' + s.sid, { method: 'DELETE' });
+      subs = subs.filter(x => x.id !== id); extra[id] = { id, title: s.title, thumb: s.thumb }; keep('extra', extra); dropped.add(id);
+    }
+    keep('subs', subs);
+  } catch (e) { e === 'auth' ? needAuth() : toast(e === 403 ? '오늘 한도를 다 썼습니다' : '실패했습니다'); }
+  busy.delete(id); render();
+}
 function chMenu(id) {
   const s = subOf(id); if (!s) return;
-  choose(s.title, s.off ? [['sub', '구독']] : [['unsub', '구독 취소', 'danger']], '', async v => {
+  choose(s.title, s.off ? [['sub', '구독']] : [['unsub', '구독 해제', 'danger']], '', async v => {
     try {
       if (v === 'sub') {
         const r = await api('https://www.googleapis.com/youtube/v3/subscriptions?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { resourceId: { kind: 'youtube#channel', channelId: id } } }) });
@@ -634,53 +651,19 @@ const fmtN = n => '구독자 ' + new Intl.NumberFormat('ko', { notation: 'compac
 const lastUp = id => stats[id] ? stats[id].last : latest[id]?.t || 0; // 쇼츠 포함
 const idle = id => (stats[id] || latest[id]?.at) && Date.now() - lastUp(id) > 365 * 86400000;
 const isSub = id => subIds().has(id);
-const wants = id => id in want ? want[id] : isSub(id) ? true : null; // null = 미정
 function review() {
   const f = view.filter || 'all';
   const all = known();
   let list = f === 'idle' ? all.filter(s => idle(s.id)) : f === 'off' ? all.filter(s => !isSub(s.id)) : all;
   list = [...list].sort((a, b) => lastUp(a.id) - lastUp(b.id));
-  const add = all.filter(s => wants(s.id) === true && !isSub(s.id)).length, del = all.filter(s => wants(s.id) === false && isSub(s.id)).length;
-  const out = all.filter(s => wants(s.id) === false && !isSub(s.id)).length;
-  const kept = all.filter(s => wants(s.id) === true).length, undec = all.filter(s => wants(s.id) === null).length;
   const segs = [['all', `전체 ${all.length}`], ['idle', `1년 넘게 쉼 ${all.filter(s => idle(s.id)).length}`], ['off', `구독 안 함 ${all.filter(s => !isSub(s.id)).length}`]];
   return `<div class="head"><div class="row"><button class="ib back" data-act="rvexit" aria-label="뒤로">${ic.back}</button><h1>구독 정리</h1></div>
-    <div class="meta">남김 ${kept} · 뺌 ${all.length - kept - undec}${undec ? ' · 미정 ' + undec : ''}</div>
+    <div class="meta">구독 ${subs.length}개 · 오래 쉰 채널부터</div>
     <div class="seg" style="padding:0 0 16px">${segs.map(x => `<button class="pill" data-f="${x[0]}" style="${x[0] === f ? 'background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:700' : ''}">${x[1]}</button>`).join('')}</div></div>
-  <div class="main" style="padding-bottom:0">${list.map(s => { const l = latest[s.id] || {}; const k = wants(s.id); return `<button class="item ${k ? 'keep' : ''} ${s.id in want ? 'chg' : ''}" data-rv="${s.id}">
+  <div class="main">${list.map(s => { const sub = isSub(s.id), b = busy.has(s.id); return `<div class="item ${sub ? '' : 'off'}">
       <span class="av" style="background-image:url('${esc(s.thumb)}')"></span>
-      <span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${lastUp(s.id) ? ago(lastUp(s.id)) : stats[s.id] || l.at ? '영상 없음' : ''}${stats[s.id] ? ' · ' + fmtN(stats[s.id].n) : ''}</span></span>
-      <span class="tg" ${k === null ? 'style="border-style:dashed"' : ''}>${k ? '남김' : k === false ? '뺌' : '미정'}</span></button>`; }).join('') || '<div class="center"><span class="vs">해당 채널이 없습니다</span></div>'}
-    ${add + del + out ? `<div class="sheet"><div class="btns"><button class="btn s" data-act="rvreset">되돌리기</button><button class="btn p" data-act="rvapply">적용${add ? ' · 구독 ' + add : ''}${del ? ' · 취소 ' + del : ''}${out ? ' · 제외 ' + out : ''}</button></div></div>` : ''}</div>`;
-}
-async function applyReview() {
-  const all = known();
-  const todo = all.filter(s => (wants(s.id) === true && !isSub(s.id)) || (wants(s.id) === false && isSub(s.id)));
-  const drop = new Set(all.filter(s => wants(s.id) === false).map(s => s.id));
-  let done = 0;
-  for (const s of todo) {
-    try {
-      if (wants(s.id) === true) {
-        const r = await api('https://www.googleapis.com/youtube/v3/subscriptions?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { resourceId: { kind: 'youtube#channel', channelId: s.id } } }) });
-        subs.push({ id: s.id, sid: r.id, title: s.title, thumb: s.thumb });
-      } else {
-        await api('https://www.googleapis.com/youtube/v3/subscriptions?id=' + subs.find(x => x.id === s.id).sid, { method: 'DELETE' });
-        subs = subs.filter(x => x.id !== s.id);
-        extra[s.id] = { id: s.id, title: s.title, thumb: s.thumb };
-      }
-    } catch (e) {
-      keep('subs', subs); keep('extra', extra); render();
-      if (e === 'auth') return needAuth();
-      return toast(`${done}건 적용 후 멈췄습니다${e === 403 ? ' (오늘 한도)' : ''}`);
-    }
-    if (want[s.id]) delete want[s.id]; done++;
-    if (done % 5 === 0) { toast(`적용 중 ${done}/${todo.length}`); render(); }
-  }
-  // 뺌으로 고른 채널은 그룹에서도 제거
-  data.groups.forEach(g => g.ch = g.ch.filter(c => !drop.has(c)));
-  drop.forEach(id => delete want[id]);
-  keep('subs', subs); keep('extra', extra); save(); render();
-  toast(`${done}건 적용했습니다`);
+      <span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${lastUp(s.id) ? ago(lastUp(s.id)) : stats[s.id] ? '영상 없음' : ''}${stats[s.id] ? ' · ' + fmtN(stats[s.id].n) : ''}</span></span>
+      <button class="tg ${sub ? 'un' : 'keep'}" data-rs="${s.id}" ${b ? 'disabled style="opacity:.5"' : ''}>${b ? '…' : sub ? '구독 해제' : '구독'}</button></div>`; }).join('') || '<div class="center"><span class="vs">해당 채널이 없습니다</span></div>'}</div>`;
 }
 function reorder() {
   return `<div class="head"><div class="row"><h1 style="font-size:20px">그룹 순서</h1><button class="pill" data-act="home">완료</button></div><div class="meta"></div></div>
@@ -765,10 +748,7 @@ $app.addEventListener('click', e => {
   if (d.v) return openVideo(d.v, d.vid);
   if (d.g) return go({ name: 'group', id: d.g });
   if (d.wg) { view.wg = d.wg; view.id = d.wg; return render(); }
-  if (d.rv) { const id = d.rv, sub = isSub(id), k = wants(id);
-    const next = sub ? !k : k === null ? true : k === true ? false : null;
-    if ((sub && next === true) || (!sub && next === null)) delete want[id]; else want[id] = next;
-    return render(); }
+  if (d.rs) return toggleSub(d.rs);
   if (d.sel) { sel.has(d.sel) ? sel.delete(d.sel) : sel.add(d.sel); return render(); }
   if (d.pick) { pick.has(d.pick) ? pick.delete(d.pick) : pick.add(d.pick); return render(); }
   if (d.f) { view.filter = d.f; sel.clear(); return render(); }
@@ -784,7 +764,7 @@ $app.addEventListener('click', e => {
     case 'tab-sub': go({ name: 'home' }); break;
     case 'menu': choose('메뉴', [['reorder', '그룹 순서'], ['review', '구독 정리'], ['theme', '화면 테마']], '', v => {
       if (v === 'reorder') go({ name: 'reorder' });
-      if (v === 'review') { want = {}; go({ name: 'review' }); loadStats().catch(() => {}); }
+      if (v === 'review') { go({ name: "review" }); loadStats().catch(() => {}); }
       if (v === 'theme') themeDlg();
     }); break;
     case 'theme': themeDlg(); break;
@@ -795,10 +775,8 @@ $app.addEventListener('click', e => {
     case 'plmenu': plMenu(view.id); break;
     case 'plnewgroup': ask('새 그룹', '', n => { data.pl.groups.push({ id: uid(), name: n, pl: [] }); save(); render(); }); break;
     case 'pladd': addDlg('', view.name === 'plv' ? view.id : null); break;
-    case 'review': want = {}; go({ name: 'review' }); loadStats().catch(() => {}); break;
-    case 'rvexit': if (Object.keys(want).length) { choose('바꾼 내용을 버릴까요?', [['y', '버리고 나가기', 'danger'], ['n', '계속 정리']], '', v => { if (v === 'y') { want = {}; go({ name: 'home' }); } }); } else go({ name: 'home' }); break;
-    case 'rvreset': want = {}; render(); break;
-    case 'rvapply': choose('적용할까요?', [['y', '적용'], ['n', '취소']], '', v => { if (v === 'y') applyReview(); }); break;
+    case 'review': go({ name: "review" }); loadStats().catch(() => {}); break;
+    case 'rvexit': { const gone = [...dropped].filter(id => !isSub(id)); if (gone.length) { data.groups.forEach(g => g.ch = g.ch.filter(c => !gone.includes(c))); save(); } dropped.clear(); go({ name: 'home' }); break; }
     case 'newgroup': case 'newgroup-pick': ask('새 그룹', '', v => { const g = { id: uid(), name: v, ch: [] }; data.groups.push(g); if (d.act === 'newgroup-pick') pick.add(g.id); save(); render(); }); break;
     case 'organize': go({ name: 'organize' }); break;
     case 'organize-w': go({ name: 'organize', gid: view.wg !== 'un' ? view.wg : null, filter: view.wg === 'un' ? 'un' : null }); break;
