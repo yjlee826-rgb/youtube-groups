@@ -266,7 +266,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-24f';
+const VER = '2026-11-24g';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -963,7 +963,7 @@ const NAV = [['home', '홈', 'home'], ['subs', '구독', 'sub'], ['pl', '재생�
 const topOf = n => ({ group: 'subs', plv: 'pl', feedall: 'home' }[n] || n);
 const fbar = () => `<nav class="fbar">${NAV.map(([k, t, i]) => `<button class="fb ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}<span>${t}</span></button>`).join('')}</nav>`;
 const tabbar = () => `<nav class="tabbar">${NAV.map(([k, t, i]) => `<button class="tb ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</nav>`;
-const railNav = () => `<div class="rbrand"><img src="../icons/yj-ring.svg" alt="YJ"><span class="bm">${BRAND}</span></div><div class="rnav">${NAV.map(([k, t, i]) => `<button class="rn ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</div><div class="rdiv"></div>`;
+const railNav = () => `<div class="rbrand"><img src="../icons/yj-ring.svg?v=2" alt="YJ"><span class="bm">${BRAND}</span></div><div class="rnav">${NAV.map(([k, t, i]) => `<button class="rn ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</div><div class="rdiv"></div>`;
 const tabs = t => `<div class="tabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const railTabs = t => `<div class="rtabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const plRow = p => `<button class="item" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">${p.count}개</span></span></button>`;
@@ -1051,7 +1051,7 @@ const notices = () => {
 };
 function home() {
   const fresh = freshList(), gs = sortGroups(data.groups);
-  return `<div class="head"><div class="row"><img class="logo-s seal" src="../icons/yj-ring.svg" alt="YJ"><div class="hlock"><span class="bm">${BRAND}</span><h1 class="wm" style="font-size:36px;color:var(--gold)">${APP_NAME}</h1></div><button class="ib" data-act="search" aria-label="검색">${ic.find}</button></div><div class="meta">구독 ${subs.length}개 · 그룹 ${data.groups.length}개</div></div>
+  return `<div class="head"><div class="row"><img class="logo-s seal" src="../icons/yj-ring.svg?v=2" alt="YJ"><div class="hlock"><span class="bm">${BRAND}</span><h1 class="wm" style="font-size:36px;color:var(--gold)">${APP_NAME}</h1></div><button class="ib" data-act="search" aria-label="검색">${ic.find}</button></div><div class="meta">구독 ${subs.length}개 · 그룹 ${data.groups.length}개</div></div>
   <div class="main">${homeBody(fresh, gs, 3)}</div>`;
 }
 function feedall() {
