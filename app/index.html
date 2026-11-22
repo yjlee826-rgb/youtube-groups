@@ -36,7 +36,7 @@ a{color:inherit;text-decoration:none}
 .badge{min-width:26px;height:24px;padding:0 8px;border-radius:12px;background:var(--gold);color:var(--gold-ink);font-size:13px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
 .strip{display:flex;gap:12px;overflow-x:auto;padding:0 18px 4px;scrollbar-width:none}
 .strip::-webkit-scrollbar{display:none}
-.vcard{width:200px;flex:none;display:flex;flex-direction:column;gap:7px}
+.vcard{width:200px;flex:none;display:flex;flex-direction:column;gap:7px;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .thumb{aspect-ratio:16/9;border-radius:12px;background:var(--thumb) center/cover no-repeat;position:relative}
 .vt{font-size:15px;font-weight:500;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .vs{font-size:14px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -85,6 +85,14 @@ a{color:inherit;text-decoration:none}
 .chg .name::after{content:' •';color:var(--gold)}
 .rv .main{max-width:760px;width:100%;margin:0 auto}
 .rv .head>*{max-width:724px;margin-left:auto;margin-right:auto}
+.tabs{display:flex;gap:22px;margin-top:-6px}
+.tabs button{padding:0 0 12px;border-bottom:2px solid transparent;font-size:16px;font-weight:500;color:var(--onbur)}
+.tabs .on{color:#F3ECE4;font-weight:700;border-bottom-color:var(--gold)}
+.rtabs{display:flex;gap:18px;margin:0 10px 18px}
+.rtabs button{font-size:20px;font-weight:700;color:var(--onbur);opacity:.6;padding:0 0 6px;border-bottom:2px solid transparent}
+.rtabs .on{opacity:1;color:#F3ECE4;border-bottom-color:var(--gold)}
+.pthumb{width:96px;height:54px;border-radius:8px;background:var(--thumb) center/cover;flex:none}
+button.sec{width:100%;text-align:left}
 /* 태블릿 */
 .wide{display:none}
 @media (min-width:900px){
@@ -138,6 +146,7 @@ let token = null, tokenExp = 0, client = null;
 let subs = load('subs', []);
 let extra = load('extra', {});
 let stats = load('stats', {});
+let pls = load('pls', []);
 let want = {};
 let latest = load('latest', {});
 let data = load('data', null);
@@ -260,6 +269,15 @@ async function loadExtra() {
     keep('extra', extra);
   }
 }
+async function loadPls() {
+  let out = [], page = '';
+  do {
+    const d = await api('https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails&mine=true&maxResults=50' + (page ? '&pageToken=' + page : ''));
+    out = out.concat(d.items.map(p => ({ id: p.id, title: p.snippet.title, thumb: p.snippet.thumbnails?.medium?.url || p.snippet.thumbnails?.default?.url || '', count: p.contentDetails.itemCount })));
+    page = d.nextPageToken || '';
+  } while (page);
+  pls = out; keep('pls', pls);
+}
 async function loadStats() {
   // 구독자 수 + 쇼츠 포함 마지막 업로드(UU 재생목록), 하루 캐시
   const need = known().map(s => s.id).filter(id => !stats[id] || Date.now() - stats[id].at > 86400000);
@@ -329,11 +347,13 @@ async function sync() {
     const remote = await driveLoad();
     if (remote && (!data || (remote.updated || 0) >= (data.updated || 0))) data = remote;
     if (!data) data = { v: 1, groups: [], seen: {}, since: Date.now(), sort: { groups: 'manual', channels: 'recent' }, updated: 0 };
+    data.pl ||= { groups: [] };
     if (applyImport()) { await driveSave(); toast('그룹을 가져왔습니다'); }
     keep('data', data);
     if (view.name === 'loading' || view.name === 'auth') view = { name: 'home' };
     render();
     await loadSubs(); await loadExtra(); render();
+    loadPls().then(render).catch(() => {});
     await loadLatest(false);
   } catch (e) { if (e === 'auth') needAuth(); else toast('불러오기 실패'); }
 }
@@ -362,6 +382,66 @@ function chMenu(id) {
       keep('subs', subs); render();
     } catch (e) { e === 'auth' ? needAuth() : toast(e === 403 ? '권한이 없습니다. 다시 로그인해 주세요' : '실패했습니다'); }
   });
+}
+const vidOf = x => (String(x).match(/(?:[?&]v=|youtu\.be\/|shorts\/|live\/|embed\/)([\w-]{11})/) || String(x).trim().match(/^([\w-]{11})$/) || [])[1];
+function openPl(id) { location.href = `https://music.youtube.com/playlist?list=${id}`; }
+function plSections() {
+  const gs = data.pl.groups, inG = new Set(gs.flatMap(g => g.pl)), by = id => pls.find(p => p.id === id);
+  const out = gs.map(g => ({ key: g.id, g, name: g.name, list: g.pl.map(by).filter(Boolean) }));
+  const rest = pls.filter(p => !inG.has(p.id));
+  if (rest.length || !gs.length) out.push({ key: 'none', name: gs.length ? '그룹 없음' : '전체', list: rest });
+  return out;
+}
+function plMove(id) {
+  const gs = data.pl.groups, cur = gs.find(g => g.pl.includes(id))?.id || 'none';
+  const put = gid => { gs.forEach(g => g.pl = g.pl.filter(x => x !== id)); const g = gs.find(x => x.id === gid); if (g) g.pl.push(id); save(); render(); };
+  choose('그룹 옮기기', [...gs.map(g => [g.id, g.name]), ['none', '그룹 없음'], ['new', '새 그룹']], cur, v => {
+    if (v === 'new') ask('새 그룹', '', n => { const g = { id: uid(), name: n, pl: [] }; gs.push(g); put(g.id); });
+    else put(v);
+  });
+}
+function plMenu(id) {
+  const p = pls.find(x => x.id === id); if (!p) return;
+  choose(p.title, [['open', '뮤직 앱에서 열기'], ['move', '그룹 옮기기'], ['add', '영상 넣기']], '', v => {
+    if (v === 'open') openPl(id); if (v === 'move') plMove(id); if (v === 'add') addDlg('', id);
+  });
+}
+function plGroupMenu(gid) {
+  const gs = data.pl.groups, i = gs.findIndex(g => g.id === gid), g = gs[i]; if (!g) return;
+  choose(g.name, [['rename', '이름 바꾸기'], ...(i ? [['up', '위로 올리기']] : []), ['del', '그룹 삭제', 'danger']], '', v => {
+    if (v === 'rename') ask('그룹 이름', g.name, n => { g.name = n; save(); render(); });
+    if (v === 'up') { [gs[i - 1], gs[i]] = [gs[i], gs[i - 1]]; save(); render(); }
+    if (v === 'del') { gs.splice(i, 1); save(); render(); toast('그룹을 지웠습니다 (재생목록은 그대로)'); }
+  });
+}
+function addDlg(url, pre) {
+  const d = document.createElement('div'); d.className = 'dlg';
+  const picked = new Set(pre ? [pre] : []);
+  const draw = () => { const v = d.querySelector('input')?.value ?? url;
+    d.innerHTML = `<div class="box"><b style="font-size:17px">재생목록에 넣기</b><input placeholder="유튜브·유튜브 뮤직 영상 주소" value="${esc(v)}" inputmode="url"><div class="chips">${pls.map(p => `<button class="chip ${picked.has(p.id) ? 'on' : ''}" data-pk="${p.id}">${esc(p.title)}</button>`).join('')}</div><div class="btns"><button class="btn s" data-x="c">취소</button><button class="btn p" data-x="ok" ${picked.size ? '' : 'disabled'}>넣기</button></div></div>`; };
+  draw(); document.body.append(d);
+  if (!url) d.querySelector('input').focus();
+  d.onclick = e => {
+    if (e.target === d) return d.remove();
+    const k = e.target.closest('[data-pk]');
+    if (k) { picked.has(k.dataset.pk) ? picked.delete(k.dataset.pk) : picked.add(k.dataset.pk); return draw(); }
+    const x = e.target.closest('[data-x]')?.dataset.x;
+    if (x === 'c') d.remove();
+    if (x === 'ok') { const v = vidOf(d.querySelector('input').value); if (!v) return toast('영상 주소를 확인해 주세요'); d.remove(); addTo(v, [...picked]); }
+  };
+}
+async function addTo(v, ids) {
+  let ok = 0, dup = 0;
+  for (const id of ids) {
+    try {
+      const c = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=id&maxResults=1&playlistId=${id}&videoId=${v}`);
+      if (c.items?.length) { dup++; continue; }
+      await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) });
+      const p = pls.find(x => x.id === id); if (p) p.count++; ok++;
+    } catch (e) { if (e === 'auth') return needAuth(); return toast(e === 404 ? '영상을 찾을 수 없습니다' : '넣기 실패'); }
+  }
+  keep('pls', pls); render();
+  toast(ok ? `${ok}곳에 넣었습니다${dup ? ` · ${dup}곳은 이미 있음` : ''}` : '이미 들어 있습니다');
 }
 function go(v) { view = v; sel.clear(); pick.clear(); render(); document.querySelector('.main, .feed')?.scrollTo(0, 0); }
 function ask(title, value, ok) {
@@ -402,11 +482,21 @@ const vCard = s => {
 const freshList = () => known().filter(s => isNew(s.id)).sort((a, b) => latest[b.id].t - latest[a.id].t);
 
 /* ---------- 휴대폰 화면 ---------- */
+const tabs = t => `<div class="tabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
+const railTabs = t => `<div class="rtabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
+const plRow = p => `<button class="item" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">영상 ${p.count}개</span></span></button>`;
+function plView() {
+  const secs = plSections();
+  return `<div class="head"><div class="row"><h1>재생목록</h1><button class="ib" data-act="plnewgroup" aria-label="새 그룹"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><div class="meta">재생목록 ${pls.length}개</div>${tabs('pl')}</div>
+  <div class="main">${secs.map(x => `${secs.length > 1 ? `<button class="sec" ${x.g ? `data-plg="${x.g.id}"` : ''}><h2>${esc(x.name)}</h2><span class="vs">${x.list.length}개</span></button>` : ''}${x.list.map(plRow).join('')}`).join('')}
+    ${pls.length ? '' : '<div class="center"><span class="vs">재생목록이 없습니다</span></div>'}
+    <button class="add" data-act="pladd" style="border-style:solid">영상 주소 붙여 넣어 재생목록에 넣기</button></div>`;
+}
 function home() {
   const fresh = freshList();
   const un = unsorted();
   const gs = sortGroups(data.groups);
-  return `<div class="head"><div class="row"><h1>구독</h1><button class="ib" data-act="gsort" aria-label="정렬">${ic.sort}</button><button class="ib" data-act="reorder" aria-label="순서 편집">${ic.more}</button></div><div class="meta">그룹 ${data.groups.length}개 · 채널 ${subs.length}개</div></div>
+  return `<div class="head"><div class="row"><h1>구독</h1><button class="ib" data-act="gsort" aria-label="정렬">${ic.sort}</button><button class="ib" data-act="reorder" aria-label="순서 편집">${ic.more}</button></div><div class="meta">그룹 ${data.groups.length}개 · 채널 ${subs.length}개</div>${tabs('sub')}</div>
   <div class="main">
     ${fresh.length ? `<div class="sec"><h2>새로 올라온 영상</h2><span class="badge">${fresh.length}</span></div><div class="strip">${fresh.slice(0, 20).map(vCard).join('')}</div>` : ''}
     ${un.length ? `<button class="notice" data-act="organize" style="width:calc(100% - 36px)">미분류 채널 ${un.length}개<b>정리하기 ›</b></button>` : ''}
@@ -503,7 +593,18 @@ function reorder() {
 const center = inner => `<div class="center"><img class="logo" src="../icons/icon-192.png" alt="">${inner}</div>`;
 
 /* ---------- 태블릿 화면 ---------- */
+function plWide() {
+  const secs = plSections();
+  if (!secs.find(x => x.key === view.ps)) view.ps = secs[0]?.key;
+  const cur = secs.find(x => x.key === view.ps) || { list: [], name: '' };
+  return `<div class="wide"><div class="rail">${railTabs('pl')}
+      ${secs.map(x => `<button class="rg ${x.key === view.ps ? 'sel' : ''}" data-ps="${x.key}"><span>${esc(x.name)}</span><i style="font-weight:500">${x.list.length}</i></button>`).join('')}
+      <button class="rg" data-act="plnewgroup" style="opacity:.8">+ 새 그룹</button></div>
+    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(cur.name)}</h2>${cur.g ? `<button class="pill" data-plg="${cur.g.id}">그룹 편집</button>` : ''}<button class="pill p" data-act="pladd">영상 넣기</button></div>
+      <div class="grid">${cur.list.map(p => `<button class="vcard" data-pl="${p.id}" style="text-align:left"><span class="thumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="vt">${esc(p.title)}</span><span class="vs">영상 ${p.count}개</span></button>`).join('')}</div></div></div>`;
+}
 function wide() {
+  if (view.name === 'pl') return plWide();
   const gs = sortGroups(data.groups);
   const un = unsorted();
   if (!view.wg) view.wg = gs[0]?.id || (un.length ? 'un' : null);
@@ -512,7 +613,7 @@ function wide() {
   const vids = list.filter(s => latest[s.id]?.vid).sort((a, b) => latest[b.id].t - latest[a.id].t);
   const title = view.wg === 'un' ? '미분류' : g ? g.name : '';
   return `<div class="wide">
-    <div class="rail"><h1>내 구독</h1>
+    <div class="rail">${railTabs('sub')}
       ${un.length ? `<button class="rg un ${view.wg === 'un' ? 'sel' : ''}" data-wg="un"><span>미분류</span><i>${un.length}</i></button>` : ''}
       ${gs.map(x => { const n = newCount(chOf(x)); return `<button class="rg ${x.id === view.wg ? 'sel' : ''}" data-wg="${x.id}"><span>${esc(x.name)}</span>${n ? `<i>${n}</i>` : ''}</button>`; }).join('')}
       <button class="rg" data-act="newgroup" style="opacity:.8">+ 새 그룹</button>
@@ -533,21 +634,27 @@ function render() {
   if (view.name === 'loading') { $app.innerHTML = center('<span class="vs">불러오는 중</span>'); return; }
   if (view.name === 'auth') { $app.innerHTML = center('<button class="btn p" data-act="login">계속</button>'); return; }
   if (!data) return;
-  const narrow = { home, group: groupView, organize, reorder, review }[view.name]?.() || home();
-  const showWide = view.name === 'home' || view.name === 'group';
+  data.pl ||= { groups: [] };
+  const narrow = { home, group: groupView, organize, reorder, review, pl: plView }[view.name]?.() || home();
+  const showWide = view.name === 'home' || view.name === 'group' || view.name === 'pl';
   $app.innerHTML = showWide ? `<div class="narrow app">${narrow}</div>${wide()}` : `<div class="app ${view.name === 'review' ? 'rv' : ''}">${narrow}</div>`;
 }
 
 /* ---------- 입력 ---------- */
 let press = null, pressed = false;
-$app.addEventListener('pointerdown', e => { const t = e.target.closest('[data-ch]'); pressed = false; if (!t) return; press = setTimeout(() => { pressed = true; chMenu(t.dataset.ch); }, 500); });
+const lpT = e => e.target.closest('[data-ch],[data-pl],[data-vid]');
+const lpRun = t => t.dataset.ch ? chMenu(t.dataset.ch) : t.dataset.pl ? plMenu(t.dataset.pl) : addDlg('https://youtu.be/' + t.dataset.vid);
+$app.addEventListener('pointerdown', e => { const t = lpT(e); pressed = false; if (!t) return; press = setTimeout(() => { pressed = true; lpRun(t); }, 500); });
 ['pointerup', 'pointercancel', 'pointermove'].forEach(k => $app.addEventListener(k, e => { if (k !== 'pointermove' || Math.abs(e.movementX) + Math.abs(e.movementY) > 4) clearTimeout(press); }));
-$app.addEventListener('contextmenu', e => { const t = e.target.closest('[data-ch]'); if (t) { e.preventDefault(); clearTimeout(press); if (!pressed) { pressed = true; chMenu(t.dataset.ch); } } });
+$app.addEventListener('contextmenu', e => { const t = lpT(e); if (t) { e.preventDefault(); clearTimeout(press); if (!pressed) { pressed = true; lpRun(t); } } });
 $app.addEventListener('click', e => {
   if (pressed) { pressed = false; return; }
   const t = e.target.closest('button,[data-ch]'); if (!t) return;
   const d = t.dataset;
   if (d.ch) return openChannel(d.ch);
+  if (d.pl) return openPl(d.pl);
+  if (d.plg) return plGroupMenu(d.plg);
+  if (d.ps) { view.ps = d.ps; return render(); }
   if (d.v) return openVideo(d.v, d.vid);
   if (d.g) return go({ name: 'group', id: d.g });
   if (d.wg) { view.wg = d.wg; view.id = d.wg; return render(); }
@@ -567,6 +674,10 @@ $app.addEventListener('click', e => {
     case 'gsort': choose('그룹 정렬', groupSorts, data.sort.groups, v => { data.sort.groups = v; save(); render(); }); break;
     case 'csort': choose('채널 정렬', chSorts, data.sort.channels, v => { data.sort.channels = v; save(); render(); }); break;
     case 'reorder': go({ name: 'reorder' }); break;
+    case 'tab-sub': go({ name: 'home' }); break;
+    case 'tab-pl': go({ name: 'pl', ps: view.ps }); if (!pls.length) loadPls().then(render).catch(() => {}); break;
+    case 'plnewgroup': ask('새 그룹', '', n => { data.pl.groups.push({ id: uid(), name: n, pl: [] }); save(); render(); }); break;
+    case 'pladd': addDlg(''); break;
     case 'review': want = {}; go({ name: 'review' }); loadStats().catch(() => {}); break;
     case 'rvexit': if (Object.keys(want).length) { choose('바꾼 내용을 버릴까요?', [['y', '버리고 나가기', 'danger'], ['n', '계속 정리']], '', v => { if (v === 'y') { want = {}; go({ name: 'home' }); } }); } else go({ name: 'home' }); break;
     case 'rvreset': want = {}; render(); break;
