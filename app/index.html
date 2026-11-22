@@ -76,8 +76,11 @@ a{color:inherit;text-decoration:none}
 .logo{width:72px;height:72px;border-radius:18px}
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 24px);transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-size:15px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1}
+.toast button{margin-left:14px;font-weight:700;text-decoration:underline}
 .dlg{position:fixed;top:0;left:0;right:0;height:var(--app-h,100%);background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .dlg .box{background:var(--card);width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:20px 18px calc(env(safe-area-inset-bottom) + 18px);display:flex;flex-direction:column;gap:10px}
+.dlg.top{align-items:flex-start}
+.dlg.top .box{border-radius:0 0 20px 20px;padding:calc(env(safe-area-inset-top) + 20px) 18px 18px}
 .dlg input{height:50px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;padding:0 14px;font-size:16px}
 .opt{height:52px;border-radius:12px;text-align:left;padding:0 14px;font-size:16px}
 .opt.sel{background:var(--bur);color:#F3ECE4;font-weight:700}
@@ -89,9 +92,9 @@ a{color:inherit;text-decoration:none}
 .chg .name::after{content:' •';color:var(--gold)}
 .rv .main{max-width:760px;width:100%;margin:0 auto}
 .rv .head>*{max-width:724px;margin-left:auto;margin-right:auto}
-.tabs{display:flex;gap:22px;margin-top:-6px}
-.tabs button{padding:0 0 12px;border-bottom:2px solid transparent;font-size:16px;font-weight:500;color:var(--onbur)}
-.tabs .on{color:#F3ECE4;font-weight:700;border-bottom-color:var(--gold)}
+.tabs{display:flex;gap:20px;flex:1;min-width:0}
+.tabs button{padding:0 0 4px;border-bottom:2px solid transparent;font-size:26px;font-weight:700;letter-spacing:-.4px;color:var(--onbur);opacity:.55;white-space:nowrap}
+.tabs .on{color:#F3ECE4;opacity:1;border-bottom-color:var(--gold)}
 .rtabs{display:flex;gap:18px;margin:0 10px 18px}
 .rtabs button{font-size:20px;font-weight:700;color:var(--onbur);opacity:.6;padding:0 0 6px;border-bottom:2px solid transparent}
 .rtabs .on{opacity:1;color:#F3ECE4;border-bottom-color:var(--gold)}
@@ -109,6 +112,7 @@ button.sec{width:100%;text-align:left}
   .rg.sel{background:var(--bg);color:var(--ink);font-weight:700}
   .rg.un{border:1px dashed var(--gold);margin-bottom:10px;color:#F3ECE4;font-weight:700}
   .rg i{font-style:normal;font-size:14px;font-weight:700;color:var(--gold)}
+  .rg.sel i{color:inherit}
   .col{width:340px;flex:none;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
   .col .top{padding:calc(env(safe-area-inset-top) + 28px) 22px 14px;border-bottom:1px solid var(--line)}
   .col .top h2{margin:0;font-size:28px}
@@ -128,16 +132,18 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23b';
+const VER = '2026-11-23c';
 // 아이폰 홈 화면 앱에서 화면 높이가 상태 표시줄만큼 짧게 잡히는 문제 보정
-if (navigator.standalone) document.documentElement.style.setProperty('--app-h', screen.height + 'px');
+const fixH = () => { const st = document.documentElement.style; navigator.standalone && matchMedia('(orientation: portrait)').matches ? st.setProperty('--app-h', screen.height + 'px') : st.removeProperty('--app-h'); };
+fixH(); addEventListener('orientationchange', () => setTimeout(fixH, 300)); addEventListener('resize', fixH);
 // 새 버전이 올라오면 스스로 다시 불러옴 (캐시 우회)
 let verAt = 0;
 function checkVer() {
   if (Date.now() - verAt < 60000) return; verAt = Date.now();
   fetch(location.pathname + '?check=' + Date.now(), { cache: 'no-store' }).then(r => r.text()).then(t => {
     const v = (t.match(/const VER = '([^']+)'/) || [])[1];
-    if (v && v !== VER) location.replace(location.pathname + '?v=' + v);
+    // 같은 버전으로는 한 번만 다시 불러옴 (서버가 예전 파일을 줄 때 무한 반복 방지)
+    if (v && v !== VER && sessionStorage.getItem('yg.tried') !== v) { sessionStorage.setItem('yg.tried', v); flush(); location.replace(location.pathname + '?v=' + v); }
   }).catch(() => {});
 }
 checkVer();
@@ -186,7 +192,12 @@ const ago = t => {
   if (s < 31536000) return Math.floor(s / 2592000) + '개월 전';
   return Math.floor(s / 31536000) + '년 전';
 };
-const toast = m => { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 1800); };
+const toast = (m, act, fn) => {
+  const t = document.getElementById('toast');
+  t.innerHTML = esc(m) + (act ? `<button>${esc(act)}</button>` : ''); t.style.pointerEvents = act ? 'auto' : '';
+  if (act) t.querySelector('button').onclick = () => { t.classList.remove('show'); t.style.pointerEvents = ''; fn(); };
+  t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => { t.classList.remove('show'); t.style.pointerEvents = ''; }, act ? 6000 : 1800);
+};
 
 const subIds = () => new Set(subs.map(s => s.id));
 const subOf = id => subs.find(s => s.id === id) || (extra[id] && { ...extra[id], off: true });
@@ -227,10 +238,14 @@ function auth(prompt) {
   });
 }
 // 토큰은 1시간짜리라, 끊기기 전에 화면 없이 조용히 다시 받아 옴
-let refreshing = null, authNeeded = false;
+let refreshing = null, authNeeded = false, authTry = 0;
 const silent = () => refreshing ||= auth('').then(() => { authNeeded = false; keep('acct', 1); }).finally(() => { refreshing = null; });
 async function api(url, opt = {}, retry = true) {
-  if (!token || Date.now() > tokenExp) { try { await silent(); } catch { throw 'auth'; } }
+  if (!token || Date.now() > tokenExp) {
+    if (authNeeded && Date.now() - authTry < 600000) throw 'auth';   // 실패한 뒤에는 10분에 한 번만 다시 시도
+    authTry = Date.now();
+    try { await silent(); } catch { throw 'auth'; }
+  }
   const r = await fetch(url, { ...opt, headers: { Authorization: 'Bearer ' + token, ...(opt.headers || {}) } });
   if (r.status === 401) { token = null; if (retry) return api(url, opt, false); throw 'auth'; }
   if (!r.ok) throw r.status;
@@ -238,18 +253,33 @@ async function api(url, opt = {}, retry = true) {
 }
 
 /* ---------- 드라이브 ---------- */
-async function driveLoad() {
-  const q = encodeURIComponent(`name='${FILE}'`);
-  const l = await api(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id)`);
-  if (l.files.length) {
-    fileId = l.files[0].id; keep('fileId', fileId);
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { Authorization: 'Bearer ' + token } });
-    if (r.ok) return r.json();
-  }
-  return null;
+// base: 마지막으로 맞춘 드라이브 파일의 시각 · dirty: 아직 안 올라간 변경 (1 = 본 표시만, 2 = 그룹·정렬 등)
+let base = load('base', 0), dirty = load('dirty', 0), syncedAt = 0, fullAt = 0;
+const norm = d => { d.groups ||= []; d.seen ||= {}; d.since ||= Date.now(); d.sort ||= {}; d.sort.groups ||= 'manual'; d.sort.channels ||= 'recent'; d.pl ||= { groups: [] }; d.pl.groups ||= []; return d; };
+// 다른 기기에서 바뀐 내용과 합침: 본 표시는 채널별로 더 최근 것, 그룹은 이 기기에서 고친 게 없으면 드라이브 것
+function merge(remote) {
+  const seen = { ...remote.seen };
+  for (const k in data.seen) if ((data.seen[k] || 0) > (seen[k] || 0)) seen[k] = data.seen[k];
+  if (dirty < 2) data = { ...remote, seen }; else data.seen = seen;
+  norm(data);
 }
-async function driveSave() {
-  data.updated = Date.now();
+async function driveLoad() {
+  if (!fileId) {
+    const q = encodeURIComponent(`name='${FILE}'`);
+    const l = await api(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id)`);
+    if (!l.files.length) return null;
+    fileId = l.files[0].id; keep('fileId', fileId);
+  }
+  try { const r = await api(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`); return r && r.updated ? norm(r) : null; }   // 비었거나 깨진 파일은 없는 것으로 봄
+  catch (e) { if (e === 404) { fileId = null; keep('fileId', null); return driveLoad(); } throw e; }
+}
+let saveQ = Promise.resolve();
+const driveSave = () => saveQ = saveQ.catch(() => {}).then(doSave);
+async function doSave() {
+  const remote = await driveLoad();
+  if (remote && remote.updated === data.updated) { base = data.updated; dirty = 0; keep('base', base); keep('dirty', 0); return; }   // 이미 올라가 있음
+  if (remote && (remote.updated || 0) !== base) merge(remote);                                                                      // 그사이 다른 기기가 고쳤으면 합침
+  const sent = data.updated = Date.now();
   keep('data', data);
   const body = JSON.stringify(data);
   if (fileId) {
@@ -261,12 +291,22 @@ async function driveSave() {
     const r = await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method: 'POST', body: fd });
     fileId = r.id; keep('fileId', fileId);
   }
+  base = sent; keep('base', base); syncedAt = Date.now();
+  if (data.updated === sent) { dirty = 0; keep('dirty', 0); }
 }
-function save() {
-  keep('data', data);
+function save(lvl = 2) {
+  data.updated = Date.now(); dirty = Math.max(dirty, lvl);
+  keep('data', data); keep('dirty', dirty);
   clearTimeout(saving);
   saving = setTimeout(() => driveSave().catch(e => e === 'auth' ? needAuth() : toast('저장 실패')), 800);
 }
+// 채널을 누르면 곧바로 유튜브 앱으로 넘어가므로, 화면이 가려지는 순간 남은 변경을 바로 올림
+function flush() {
+  if (!dirty || !fileId || !token || Date.now() > tokenExp || Date.now() - syncedAt > 600000) return;
+  clearTimeout(saving);
+  fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, { method: 'PATCH', keepalive: true, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).catch(() => {});
+}
+addEventListener('pagehide', flush);
 
 /* ---------- YouTube ---------- */
 async function loadSubs() {
@@ -308,7 +348,7 @@ async function loadItems(pid, force) {
   let out = [], page = '';
   do {
     const d = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=${pid}` + (page ? '&pageToken=' + page : ''));
-    out = out.concat(d.items.filter(i => i.snippet.thumbnails && Object.keys(i.snippet.thumbnails).length).map(i => ({ pi: i.id, vid: i.contentDetails.videoId, title: i.snippet.title, ch: (i.snippet.videoOwnerChannelTitle || '').replace(/ - Topic$/, ''), thumb: i.snippet.thumbnails.medium?.url || i.snippet.thumbnails.default?.url || '' })));
+    out = out.concat(d.items.filter(i => i.snippet.thumbnails && Object.keys(i.snippet.thumbnails).length).map(i => ({ pi: i.id, pos: i.snippet.position, vid: i.contentDetails.videoId, title: i.snippet.title, ch: (i.snippet.videoOwnerChannelTitle || '').replace(/ - Topic$/, ''), thumb: i.snippet.thumbnails.medium?.url || i.snippet.thumbnails.default?.url || '' })));
     page = d.nextPageToken || '';
   } while (page);
   plItems[pid] = { at: Date.now(), items: out };
@@ -330,25 +370,31 @@ async function loadStats() {
     keep('stats', stats); if (view.name === 'review') render();
   }
 }
+let quotaHit = 0;
 async function latestOf(id) {
   for (const p of ['UULF', 'UU']) {
     try {
       const d = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=1&playlistId=${p}${id.slice(2)}`);
       const it = d.items?.[0];
       if (it) return { t: Date.parse(it.contentDetails.videoPublishedAt || it.snippet.publishedAt), title: it.snippet.title, vid: it.contentDetails.videoId, thumb: it.snippet.thumbnails?.medium?.url || '', at: Date.now() };
-      if (p === 'UULF') continue;
-    } catch (e) { if (e === 'auth') throw e; }
+    } catch (e) {
+      if (e === 'auth') throw e;
+      if (e === 403) quotaHit = Date.now();
+      if (e !== 404) return null;   // 네트워크·한도 오류: 예전 값을 그대로 둠 (404만 '그 목록 없음')
+    }
   }
   return { t: 0, at: Date.now() };
 }
 async function loadLatest(force) {
+  if (Date.now() - quotaHit < 600000) return;
   const stale = known().filter(s => force || !latest[s.id] || Date.now() - latest[s.id].at > 15 * 60000);
   for (let i = 0; i < stale.length; i += 8) {
     const part = stale.slice(i, i + 8);
     const r = await Promise.all(part.map(s => latestOf(s.id)));
-    part.forEach((s, k) => latest[s.id] = r[k]);
+    part.forEach((s, k) => { if (r[k]) latest[s.id] = r[k]; });
     keep('latest', latest);
     render();
+    if (Date.now() - quotaHit < 600000) break;
   }
 }
 
@@ -383,34 +429,46 @@ async function start() {
   await sync();
 }
 function waitGis() { return new Promise(r => { const c = () => window.google?.accounts?.oauth2 ? r() : setTimeout(c, 100); c(); }); }
-async function sync() {
+let syncing = false;
+async function sync(full = true) {
+  if (syncing) return; syncing = true;
   try {
     const remote = await driveLoad();
-    if (remote && (!data || (remote.updated || 0) >= (data.updated || 0))) data = remote;
-    if (!data) data = { v: 1, groups: [], seen: {}, since: Date.now(), sort: { groups: 'manual', channels: 'recent' }, updated: 0 };
-    data.pl ||= { groups: [] };
-    if (applyImport()) { await driveSave(); toast('그룹을 가져왔습니다'); }
-    keep('data', data);
+    if (remote) { if (!data) data = remote; else if (remote.updated !== data.updated) merge(remote); base = remote.updated || 0; keep('base', base); }
+    if (!data) data = { v: 1, updated: 0 };
+    norm(data);
+    if (applyImport()) { dirty = 2; toast('그룹을 가져왔습니다'); }
+    keep('data', data); syncedAt = Date.now();
+    if (dirty) await driveSave();
     if (view.name === 'loading' || view.name === 'auth') view = { name: 'home' };
     render();
-    await loadSubs(); await loadExtra(); render();
-    loadPls().then(render).catch(() => {});
+    if (full) { await loadSubs(); await loadExtra(); fullAt = Date.now(); render(); loadPls().then(render).catch(() => {}); }
     await loadLatest(false);
   } catch (e) { if (e === 'auth') needAuth(); else toast('불러오기 실패'); }
+  syncing = false;
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && data) loadLatest(false).then(render).catch(e => e === 'auth' && needAuth()); });
+// 앱은 며칠씩 켜진 채로 남으므로, 화면으로 돌아올 때마다 다시 맞춤 (구독 목록은 5분, 그룹은 1분 간격)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') return flush();
+  if (!data) return;
+  if (Date.now() - fullAt > 300000) sync(true);
+  else if (Date.now() - syncedAt > 60000) sync(false);
+  else { if (dirty) driveSave().catch(() => {}); loadLatest(false).then(render).catch(e => e === 'auth' && needAuth()); }
+});
 
 /* ---------- 동작 ---------- */
+// 휴대폰·태블릿은 주소로 넘기면 유튜브 앱이 열리고, PC는 새 탭으로 엶 (앱 화면이 유튜브로 바뀌어 버리지 않게)
+const openUrl = u => { matchMedia('(any-pointer: coarse)').matches ? location.href = u : window.open(u, '_blank'); };
 function openChannel(id) {
-  data.seen[id] = Date.now(); save();
-  location.href = `https://www.youtube.com/channel/${id}/videos`;
+  data.seen[id] = Date.now(); save(1); render();
+  openUrl(`https://www.youtube.com/channel/${id}/videos`);
 }
 function openVideo(id, vid) {
-  data.seen[id] = Date.now(); save();
-  location.href = `https://www.youtube.com/watch?v=${vid}`;
+  data.seen[id] = Date.now(); save(1); render();
+  openUrl(`https://www.youtube.com/watch?v=${vid}`);
 }
 let busy = new Set(), dropped = new Set();
-async function toggleSub(id) {
+async function toggleSub(id, track) {
   const s = subOf(id); if (!s || busy.has(id)) return;
   busy.add(id); render();
   try {
@@ -419,7 +477,7 @@ async function toggleSub(id) {
       subs.push({ id, sid: r.id, title: s.title, thumb: s.thumb }); dropped.delete(id);
     } else {
       await api('https://www.googleapis.com/youtube/v3/subscriptions?id=' + s.sid, { method: 'DELETE' });
-      subs = subs.filter(x => x.id !== id); extra[id] = { id, title: s.title, thumb: s.thumb }; keep('extra', extra); dropped.add(id);
+      subs = subs.filter(x => x.id !== id); extra[id] = { id, title: s.title, thumb: s.thumb }; keep('extra', extra); if (track) dropped.add(id);
     }
     keep('subs', subs);
   } catch (e) { e === 'auth' ? needAuth() : toast(e === 403 ? '오늘 한도를 다 썼습니다' : '실패했습니다'); }
@@ -427,23 +485,12 @@ async function toggleSub(id) {
 }
 function chMenu(id) {
   const s = subOf(id); if (!s) return;
-  choose(s.title, s.off ? [['sub', '구독']] : [['unsub', '구독 해제', 'danger']], '', async v => {
-    try {
-      if (v === 'sub') {
-        const r = await api('https://www.googleapis.com/youtube/v3/subscriptions?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { resourceId: { kind: 'youtube#channel', channelId: id } } }) });
-        subs.push({ id, sid: r.id, title: s.title, thumb: s.thumb }); toast('구독했습니다');
-      } else {
-        await api('https://www.googleapis.com/youtube/v3/subscriptions?id=' + s.sid, { method: 'DELETE' });
-        subs = subs.filter(x => x.id !== id); extra[id] = { id, title: s.title, thumb: s.thumb }; keep('extra', extra); toast('구독을 취소했습니다');
-      }
-      keep('subs', subs); render();
-    } catch (e) { e === 'auth' ? needAuth() : toast(e === 403 ? '권한이 없습니다. 다시 로그인해 주세요' : '실패했습니다'); }
-  });
+  choose(s.title, s.off ? [['sub', '구독']] : [['unsub', '구독 해제', 'danger']], '', () => toggleSub(id, view.name === 'review'));
 }
 const vidOf = x => (String(x).match(/(?:[?&]v=|youtu\.be\/|shorts\/|live\/|embed\/)([\w-]{11})/) || String(x).trim().match(/^([\w-]{11})$/) || [])[1];
 const listOf = x => (String(x).match(/[?&]list=([\w-]+)/) || [])[1];
-function openPl(id) { location.href = `https://music.youtube.com/playlist?list=${id}`; }
-function playTrack(pid, vid) { location.href = `https://music.youtube.com/watch?v=${vid}&list=${pid}`; }
+function openPl(id) { openUrl(`https://music.youtube.com/playlist?list=${id}`); }
+function playTrack(pid, vid) { openUrl(`https://music.youtube.com/watch?v=${vid}&list=${pid}`); }
 function itemMenu(pid, vid, pi) {
   const it = plItems[pid]?.items.find(x => x.pi === pi); if (!it) return;
   choose(it.title, [['play', '재생'], ['add', '다른 재생목록에도 넣기'], ['rm', '이 재생목록에서 빼기', 'danger']], '', async v => {
@@ -469,7 +516,7 @@ function plMove(id) {
 }
 function plMenu(id) {
   const p = pls.find(x => x.id === id); if (!p) return;
-  choose(p.title, [['move', '그룹 옮기기'], ['add', '영상 넣기'], ['open', '뮤직 앱에서 재생목록 열기']], '', v => {
+  choose(p.title, [['move', '그룹 옮기기'], ['add', '주소로 넣기'], ['open', '뮤직 앱에서 재생목록 열기']], '', v => {
     if (v === 'open') openPl(id); if (v === 'move') plMove(id); if (v === 'add') addDlg('', id);
   });
 }
@@ -478,11 +525,11 @@ function plGroupMenu(gid) {
   choose(g.name, [['rename', '이름 바꾸기'], ...(i ? [['up', '위로 올리기']] : []), ['del', '그룹 삭제', 'danger']], '', v => {
     if (v === 'rename') ask('그룹 이름', g.name, n => { g.name = n; save(); render(); });
     if (v === 'up') { [gs[i - 1], gs[i]] = [gs[i], gs[i - 1]]; save(); render(); }
-    if (v === 'del') { gs.splice(i, 1); save(); render(); toast('그룹을 지웠습니다 (재생목록은 그대로)'); }
+    if (v === 'del') { gs.splice(i, 1); save(); render(); toast('그룹을 삭제했습니다', '되돌리기', () => { gs.splice(i, 0, g); save(); render(); }); }
   });
 }
 function addDlg(url, pre) {
-  const d = document.createElement('div'); d.className = 'dlg';
+  const d = document.createElement('div'); d.className = 'dlg top';
   const picked = new Set(pre ? [pre] : []);
   const draw = () => { const v = d.querySelector('input')?.value ?? url;
     d.innerHTML = `<div class="box"><b style="font-size:17px">재생목록에 넣기</b><input placeholder="곡·영상·앨범 주소" value="${esc(v)}" inputmode="url"><div class="chips">${pls.map(p => `<button class="chip ${picked.has(p.id) ? 'on' : ''}" data-pk="${p.id}">${esc(p.title)}</button>`).join('')}</div><div class="btns"><button class="btn s" data-x="c">취소</button><button class="btn p" data-x="ok" ${picked.size ? '' : 'disabled'}>넣기</button></div></div>`; };
@@ -544,7 +591,7 @@ async function addTo(v, ids) {
 function themeDlg() { choose('화면 테마', [['auto', '기기 설정 따르기'], ['light', '밝게'], ['dark', '어둡게']], load('theme', 'auto'), v => { keep('theme', v); setTheme(v); }); }
 function go(v) { view = v; sel.clear(); pick.clear(); render(); document.querySelector('.main, .feed')?.scrollTo(0, 0); }
 function ask(title, value, ok) {
-  const d = document.createElement('div'); d.className = 'dlg';
+  const d = document.createElement('div'); d.className = 'dlg top';
   d.innerHTML = `<div class="box"><b style="font-size:17px">${esc(title)}</b><input value="${esc(value)}" maxlength="30"><div class="btns"><button class="btn s">취소</button><button class="btn p">확인</button></div></div>`;
   document.body.append(d);
   const i = d.querySelector('input'); i.focus();
@@ -552,6 +599,7 @@ function ask(title, value, ok) {
   d.onclick = e => { if (e.target === d) close(); };
   d.querySelector('.s').onclick = close;
   d.querySelector('.p').onclick = () => { const v = i.value.trim(); if (v) { ok(v); close(); } };
+  i.onkeydown = e => { if (e.key === 'Enter') d.querySelector('.p').click(); };
 }
 function choose(title, opts, cur, ok) {
   const d = document.createElement('div'); d.className = 'dlg';
@@ -583,15 +631,17 @@ const freshList = () => known().filter(s => isNew(s.id)).sort((a, b) => latest[b
 /* ---------- 휴대폰 화면 ---------- */
 const tabs = t => `<div class="tabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const railTabs = t => `<div class="rtabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
-const plRow = p => `<button class="item" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">영상 ${p.count}개</span></span></button>`;
+const plRow = p => `<button class="item" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">${p.count}개</span></span></button>`;
 const trackRow = (pid, it, i, n) => view.edit
   ? `<div class="item"><span class="pthumb" style="background-image:url('${esc(it.thumb)}')"></span><span class="body"><span class="name">${esc(it.title)}</span><span class="vs">${esc(it.ch)}</span></span><span class="mv"><button data-tu="${i}" aria-label="위로" ${i ? '' : 'disabled style="opacity:.25"'}>${ic.up}</button><button data-td="${i}" aria-label="아래로" ${i < n - 1 ? '' : 'disabled style="opacity:.25"'}>${ic.down}</button><button data-tx="${i}" aria-label="빼기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span></div>`
   : `<button class="item" data-mv="${it.vid}" data-pi="${it.pi}" data-pid="${pid}"><span class="pthumb" style="background-image:url('${esc(it.thumb)}')"></span><span class="body"><span class="name">${esc(it.title)}</span><span class="vs">${esc(it.ch)}</span></span></button>`;
 const trackList = pid => { const c = plItems[pid]; return !c ? '<div class="center"><span class="vs">불러오는 중</span></div>' : c.items.length ? c.items.map((it, i) => trackRow(pid, it, i, c.items.length)).join('') : '<div class="center"><span class="vs">비어 있습니다</span></div>'; };
 async function moveTrack(pid, i, j) {
-  const a = plItems[pid].items; const it = a[i];
+  // 삭제·비공개 영상은 목록에 안 보여도 자리를 차지하므로, 화면 순번이 아니라 유튜브의 실제 자리 번호로 옮김
+  const a = plItems[pid].items; const it = a[i], other = a[j], to = other.pos ?? j;
   try {
-    await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: it.pi, snippet: { playlistId: pid, resourceId: { kind: 'youtube#video', videoId: it.vid }, position: j } }) });
+    await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: it.pi, snippet: { playlistId: pid, resourceId: { kind: 'youtube#video', videoId: it.vid }, position: to } }) });
+    it.pos = to; other.pos = to + (j < i ? 1 : -1);
     a.splice(i, 1); a.splice(j, 0, it); render();
   } catch (e) { e === 'auth' ? needAuth() : toast('순서 바꾸기 실패'); }
 }
@@ -609,21 +659,21 @@ function plvView() {
   if (view.edit) return `<div class="head"><div class="row"><h1 style="font-size:20px">${esc(p.title)} 편집</h1><button class="pill" data-act="pledit">완료</button></div><div class="meta">화살표로 순서 바꾸기 · ✕로 빼기</div></div>
   <div class="main">${trackList(p.id)}</div>`;
   return `<div class="head"><div class="row"><button class="ib back" data-act="plback" aria-label="뒤로">${ic.back}</button><span style="flex:1"></span>${first ? `<button class="pill" data-act="plplay">전체 재생</button>` : ''}<button class="pill" data-act="pledit">편집</button><button class="ib" data-act="plmenu" aria-label="메뉴">${ic.more}</button></div>
-    <div class="row"><h1>${esc(p.title)}</h1></div><div class="meta">영상 ${p.count}개</div></div>
-  <div class="main">${trackList(p.id)}<button class="add" data-act="pladd" style="border-style:solid">영상 넣기</button></div>`;
+    <div class="row"><h1>${esc(p.title)}</h1></div><div class="meta">${p.count}개</div></div>
+  <div class="main">${trackList(p.id)}<button class="add" data-act="pladd" style="border-style:solid">주소로 넣기</button></div>`;
 }
 function plView() {
   const secs = plSections();
-  return `<div class="head"><div class="row"><h1>재생목록</h1><button class="ib" data-act="plnewgroup" aria-label="새 그룹"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><div class="meta">재생목록 ${pls.length}개</div>${tabs('pl')}</div>
+  return `<div class="head"><div class="row">${tabs('pl')}<button class="ib" data-act="plnewgroup" aria-label="새 그룹"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><div class="meta">재생목록 ${pls.length}개</div></div>
   <div class="main">${secs.map(x => `${secs.length > 1 ? `<button class="sec" ${x.g ? `data-plg="${x.g.id}"` : ''}><h2>${esc(x.name)}</h2><span class="vs">${x.list.length}개</span></button>` : ''}${x.list.map(plRow).join('')}`).join('')}
     ${pls.length ? '' : '<div class="center"><span class="vs">재생목록이 없습니다</span></div>'}
-    <button class="add" data-act="pladd" style="border-style:solid">영상 주소 붙여 넣어 재생목록에 넣기</button></div>`;
+    <button class="add" data-act="pladd" style="border-style:solid">주소로 넣기</button></div>`;
 }
 function home() {
   const fresh = freshList();
   const un = unsorted();
   const gs = sortGroups(data.groups);
-  return `<div class="head"><div class="row"><h1>구독</h1><button class="ib" data-act="gsort" aria-label="정렬">${ic.sort}</button><button class="ib" data-act="menu" aria-label="메뉴">${ic.more}</button></div><div class="meta">그룹 ${data.groups.length}개 · 채널 ${subs.length}개</div>${tabs('sub')}</div>
+  return `<div class="head"><div class="row">${tabs('sub')}<button class="ib" data-act="gsort" aria-label="정렬">${ic.sort}</button><button class="ib" data-act="menu" aria-label="메뉴">${ic.more}</button></div><div class="meta">그룹 ${data.groups.length}개 · 채널 ${subs.length}개</div></div>
   <div class="main">
     ${fresh.length ? `<div class="sec"><h2>새로 올라온 영상</h2><span class="badge">${fresh.length}</span></div><div class="strip">${fresh.slice(0, 20).map(vCard).join('')}</div>` : ''}
     ${un.length ? `<button class="notice" data-act="organize" style="width:calc(100% - 36px)">미분류 채널 ${un.length}개<b>정리하기 ›</b></button>` : ''}
@@ -632,7 +682,6 @@ function home() {
       return `<button class="item" data-g="${g.id}"><span class="gav">${esc(g.name.slice(0, 1))}</span><span class="body"><span class="name">${esc(g.name)}</span><span class="vs">채널 ${list.length}개</span></span>${n ? `<span class="badge">${n}</span>` : ''}</button>`;
     }).join('')}</div>
     <button class="add" data-act="newgroup">새 그룹</button>
-    ${subs.length ? `<button class="add" data-act="organize" style="border-style:solid">채널 정리</button><button class="add" data-act="review" style="border-style:solid">구독 정리</button>` : ''}
   </div>`;
 }
 function groupView() {
@@ -695,14 +744,14 @@ function plWide() {
       ${secs.map(x => `<button class="rg ${x.key === view.ps ? 'sel' : ''}" data-ps="${x.key}"><span>${esc(x.name)}</span><i style="font-weight:500">${x.list.length}</i></button>`).join('')}
       <button class="rg" data-act="plnewgroup" style="opacity:.8">+ 새 그룹</button></div>
     <div class="col"><div class="top"><h2>${esc(cur.name)}</h2><div class="vs" style="margin-top:4px">재생목록 ${cur.list.length}개</div></div>
-      <div class="list">${cur.list.map(p => `<button class="item ${p.id === sel.id ? 'sel' : ''}" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">영상 ${p.count}개</span></span></button>`).join('')}</div></div>
-    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(sel.title)}</h2>${plItems[sel.id]?.items.length ? '<button class="pill" data-act="plplay">전체 재생</button>' : ''}<button class="pill ${view.edit ? 'p' : ''}" data-act="pledit">${view.edit ? '완료' : '편집'}</button><button class="pill" data-act="plmenu">더보기</button><button class="pill p" data-act="pladd">영상 넣기</button></div>
+      <div class="list">${cur.list.map(p => `<button class="item ${p.id === sel.id ? 'sel' : ''}" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">${p.count}개</span></span></button>`).join('')}</div></div>
+    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(sel.title)}</h2>${plItems[sel.id]?.items.length ? '<button class="pill" data-act="plplay">전체 재생</button>' : ''}<button class="pill ${view.edit ? 'p' : ''}" data-act="pledit">${view.edit ? '완료' : '편집'}</button><button class="pill" data-act="plmenu">더보기</button><button class="pill p" data-act="pladd">주소로 넣기</button></div>
       <div style="max-width:760px">${trackList(sel.id)}</div></div></div>`;
   return `<div class="wide"><div class="rail">${railTabs('pl')}
       ${secs.map(x => `<button class="rg ${x.key === view.ps ? 'sel' : ''}" data-ps="${x.key}"><span>${esc(x.name)}</span><i style="font-weight:500">${x.list.length}</i></button>`).join('')}
       <button class="rg" data-act="plnewgroup" style="opacity:.8">+ 새 그룹</button></div>
-    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(cur.name)}</h2>${cur.g ? `<button class="pill" data-plg="${cur.g.id}">그룹 편집</button>` : ''}<button class="pill p" data-act="pladd">영상 넣기</button></div>
-      <div class="grid">${cur.list.map(p => `<button class="vcard" data-pl="${p.id}" style="text-align:left"><span class="thumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="vt">${esc(p.title)}</span><span class="vs">영상 ${p.count}개</span></button>`).join('')}</div></div></div>`;
+    <div class="feed"><div class="bar"><h2 style="margin:0;font-size:28px;flex:1">${esc(cur.name)}</h2>${cur.g ? `<button class="pill" data-plg="${cur.g.id}">그룹 편집</button>` : ''}<button class="pill p" data-act="pladd">주소로 넣기</button></div>
+      <div class="grid">${cur.list.map(p => `<button class="vcard" data-pl="${p.id}" style="text-align:left"><span class="thumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="vt">${esc(p.title)}</span><span class="vs">${p.count}개</span></button>`).join('')}</div></div></div>`;
 }
 function wide() {
   if (view.name === 'pl' || view.name === 'plv') return plWide();
@@ -731,14 +780,22 @@ function wide() {
 }
 
 /* ---------- 그리기 ---------- */
+// 화면을 다시 그려도 스크롤 자리를 지킴 (같은 화면일 때만; 왼쪽 레일은 항상)
+const SCR = ['.rail', '.main', '.list', '.feed', '.strip', '.chips'];
+let lastKey = '';
 function render() {
-  if (view.name === 'loading') { $app.innerHTML = center('<span class="vs">불러오는 중</span>'); return; }
-  if (view.name === 'auth') { $app.innerHTML = center('<button class="btn p" data-act="login">계속</button>'); return; }
+  if (view.name === 'loading') { lastKey = ''; $app.innerHTML = center('<span class="vs">불러오는 중</span>'); return; }
+  if (view.name === 'auth') { lastKey = ''; $app.innerHTML = center('<button class="btn p" data-act="login">계속</button>'); return; }
   if (!data) return;
-  data.pl ||= { groups: [] };
+  norm(data);
   const narrow = { home, group: groupView, organize, reorder, review, pl: plView, plv: plvView }[view.name]?.() || home();
   const showWide = view.name === 'home' || view.name === 'group' || view.name === 'pl' || view.name === 'plv';
-  $app.innerHTML = (showWide ? `<div class="narrow app">${narrow}</div>${wide()}` : `<div class="app ${view.name === 'review' ? 'rv' : ''}">${narrow}</div>`) + (authNeeded ? '<button class="relog" data-act="login">다시 연결</button>' : '');
+  const html = (showWide ? `<div class="narrow app">${narrow}</div>${wide()}` : `<div class="app ${view.name === 'review' ? 'rv' : ''}">${narrow}</div>`) + (authNeeded ? '<button class="relog" data-act="login">다시 연결</button>' : '');
+  const key = [view.name, view.id, view.wg, view.ps, view.filter, view.gid].join('|');
+  const pos = SCR.map((q, i) => i && key !== lastKey ? [] : [...$app.querySelectorAll(q)].map(e => [e.scrollTop, e.scrollLeft]));
+  $app.innerHTML = html;
+  SCR.forEach((q, i) => [...$app.querySelectorAll(q)].forEach((e, k) => { const p = pos[i][k]; if (p && (p[0] || p[1])) { e.scrollTop = p[0]; e.scrollLeft = p[1]; } }));
+  lastKey = key;
 }
 
 /* ---------- 입력 ---------- */
@@ -762,7 +819,7 @@ $app.addEventListener('click', e => {
   if (d.v) return openVideo(d.v, d.vid);
   if (d.g) return go({ name: 'group', id: d.g });
   if (d.wg) { view.wg = d.wg; view.id = d.wg; return render(); }
-  if (d.rs) return toggleSub(d.rs);
+  if (d.rs) return toggleSub(d.rs, true);
   if (d.sel) { sel.has(d.sel) ? sel.delete(d.sel) : sel.add(d.sel); return render(); }
   if (d.pick) { pick.has(d.pick) ? pick.delete(d.pick) : pick.add(d.pick); return render(); }
   if (d.f) { view.filter = d.f; sel.clear(); return render(); }
@@ -776,7 +833,8 @@ $app.addEventListener('click', e => {
     case 'csort': choose('채널 정렬', chSorts, data.sort.channels, v => { data.sort.channels = v; save(); render(); }); break;
     case 'reorder': go({ name: 'reorder' }); break;
     case 'tab-sub': go({ name: 'home' }); break;
-    case 'menu': choose('메뉴', [['reorder', '그룹 순서'], ['review', '구독 정리'], ['theme', '화면 테마']], '', v => {
+    case 'menu': choose('메뉴', [['organize', '채널 정리'], ['review', '구독 정리'], ['reorder', '그룹 순서'], ['theme', '화면 테마']], '', v => {
+      if (v === 'organize') go({ name: 'organize' });
       if (v === 'reorder') go({ name: 'reorder' });
       if (v === 'review') { go({ name: "review" }); loadStats().catch(() => {}); }
       if (v === 'theme') themeDlg();
@@ -798,15 +856,14 @@ $app.addEventListener('click', e => {
     case 'selall': { const all = [...$app.querySelectorAll('[data-sel]')].map(b => b.dataset.sel); const every = all.every(x => sel.has(x)); all.forEach(x => every ? sel.delete(x) : sel.add(x)); render(); break; }
     case 'put': data.groups.forEach(g => { if (pick.has(g.id)) sel.forEach(c => { if (!g.ch.includes(c)) g.ch.push(c); }); }); save(); toast(`${sel.size}개를 넣었습니다`); sel.clear(); render(); break;
     case 'pull': { const from = pick.size ? pick : new Set([view.gid]); data.groups.forEach(g => { if (from.has(g.id)) g.ch = g.ch.filter(c => !sel.has(c)); }); save(); toast(`${sel.size}개를 뺐습니다`); sel.clear(); render(); break; }
-    case 'allseen': { const g = cur(); chOf(g).forEach(s => data.seen[s.id] = Date.now()); save(); render(); break; }
+    case 'allseen': { const g = cur(); chOf(g).forEach(s => data.seen[s.id] = Date.now()); save(1); render(); break; }
     case 'gmenu': { const g = cur(); if (!g) break; choose(g.name, [['rename', '이름 바꾸기'], ['seen', '모두 확인함'], ['del', '그룹 삭제', 'danger']], '', v => {
       if (v === 'rename') ask('그룹 이름', g.name, n => { g.name = n; save(); render(); });
-      if (v === 'seen') { chOf(g).forEach(s => data.seen[s.id] = Date.now()); save(); render(); }
-      if (v === 'del') { const i = data.groups.indexOf(g); const backup = g; data.groups.splice(i, 1); save(); go({ name: 'home' }); toast('그룹을 삭제했습니다'); undoDel = () => { data.groups.splice(i, 0, backup); save(); render(); }; }
+      if (v === 'seen') { chOf(g).forEach(s => data.seen[s.id] = Date.now()); save(1); render(); }
+      if (v === 'del') { const i = data.groups.indexOf(g); data.groups.splice(i, 1); save(); go({ name: 'home' }); toast('그룹을 삭제했습니다', '되돌리기', () => { data.groups.splice(i, 0, g); save(); render(); }); }
     }); break; }
   }
 });
-let undoDel = null;
 
 start();
 }
