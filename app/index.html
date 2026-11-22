@@ -76,6 +76,7 @@ a{color:inherit;text-decoration:none}
 .logo{width:72px;height:72px;border-radius:18px}
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 24px);transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-size:15px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1}
+.has-relog .toast{bottom:calc(env(safe-area-inset-bottom) + 80px)}
 .toast button{margin-left:14px;font-weight:700;text-decoration:underline}
 .dlg{position:fixed;top:0;left:0;right:0;height:var(--app-h,100%);background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .dlg .box{background:var(--card);width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:20px 18px calc(env(safe-area-inset-bottom) + 18px);display:flex;flex-direction:column;gap:10px}
@@ -153,7 +154,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23e';
+const VER = '2026-11-23f';
 // 아이폰 홈 화면 앱에서 화면 높이가 상태 표시줄만큼 짧게 잡히는 문제 보정
 const fixH = () => { const st = document.documentElement.style; navigator.standalone && matchMedia('(orientation: portrait)').matches ? st.setProperty('--app-h', screen.height + 'px') : st.removeProperty('--app-h'); };
 fixH(); addEventListener('orientationchange', () => setTimeout(fixH, 300)); addEventListener('resize', fixH);
@@ -269,15 +270,53 @@ function auth(prompt) {
     if (!window.google?.accounts?.oauth2) return rej('gis');
     client = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID, scope: SCOPES,
-      callback: r => { if (r.error) return rej(r.error); token = r.access_token; tokenExp = Date.now() + (r.expires_in - 60) * 1000; keep('tok', { token, tokenExp, scope: SCOPES }); res(); },
+      callback: r => { if (r.error) return rej(r.error); setTok(r.access_token, r.expires_in); res(); },
       error_callback: e => rej(e.type || 'err')
     });
     client.requestAccessToken({ prompt });
   });
 }
-// 토큰은 1시간짜리라, 끊기기 전에 화면 없이 조용히 다시 받아 옴
+const setTok = (t, exp) => { token = t; tokenExp = Date.now() + (exp - 60) * 1000; keep('tok', { token, tokenExp, scope: SCOPES }); };
+// 로그인 유지: 처음 한 번 '오래가는 열쇠(rt)'를 받아 이 기기에만 보관하고, 이후 출입증은 서버(yg-auth)에서 화면 없이 새로 받음
+const AUTH = 'https://yg-auth.yjlee826.workers.dev';
+const post = (path, body) => fetch(AUTH + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(x => x.json());
+async function viaServer() {
+  const rt = load('rt', null); if (!rt) throw 'nort';
+  const j = await post('/refresh', { refresh_token: rt });
+  if (j.access_token) return setTok(j.access_token, j.expires_in);
+  if (j.error === 'invalid_grant') localStorage.removeItem(LS('rt'));   // 열쇠가 취소됐으면 버림
+  throw 'rt';
+}
+function codeLogin() {
+  return new Promise((res, rej) => {
+    if (!window.google?.accounts?.oauth2) return rej('gis');
+    google.accounts.oauth2.initCodeClient({
+      client_id: CLIENT_ID, scope: SCOPES, ux_mode: 'popup', select_account: !load('acct', 0),
+      callback: async r => {
+        if (r.error) return rej(r.error);
+        try {
+          const t = await post('/token', { code: r.code });
+          if (!t.access_token) return rej(t.error || 'token');
+          setTok(t.access_token, t.expires_in); keep('acct', 1);
+          if (t.refresh_token) keep('rt', t.refresh_token);
+          res(!!t.refresh_token);
+        } catch (e) { rej(e); }
+      },
+      error_callback: e => rej(e.type || 'err')
+    }).requestCode();
+  });
+}
+function login() {
+  codeLogin().then(ok => {
+    authNeeded = false; render(); sync();
+    // 예전에 이미 허용한 계정이면 구글이 열쇠를 다시 안 줄 수 있음 → 허용을 한 번 지우고 다시 받음
+    if (!ok) toast('로그인 유지를 켜려면 한 번 더 눌러 주세요', '다시', () => google.accounts.oauth2.revoke(token, () => login()));
+    else toast('이제 로그인이 유지됩니다');
+  }).catch(() => toast('로그인 실패'));
+}
+// 출입증은 1시간짜리라, 끊기면 화면 없이 새로 받음: 서버 열쇠 → 안 되면 구글 조용한 로그인
 let refreshing = null, authNeeded = false, authTry = 0;
-const silent = () => refreshing ||= auth('').then(() => { authNeeded = false; keep('acct', 1); }).finally(() => { refreshing = null; });
+const silent = () => refreshing ||= viaServer().catch(async () => { await waitGis(); return auth(''); }).then(() => { authNeeded = false; keep('acct', 1); }).finally(() => { refreshing = null; });
 async function api(url, opt = {}, retry = true) {
   if (!token || Date.now() > tokenExp) {
     if (authNeeded && Date.now() - authTry < 600000) throw 'auth';   // 실패한 뒤에는 10분에 한 번만 다시 시도
@@ -508,10 +547,7 @@ async function start() {
   const t = load('tok', null);
   if (t && t.scope === SCOPES && Date.now() < t.tokenExp) { token = t.token; tokenExp = t.tokenExp; }
   if (data) render(); else { view = { name: 'loading' }; render(); }
-  if (!token) {
-    await waitGis();
-    try { await silent(); } catch { return needAuth(); }
-  }
+  if (!token) { try { await silent(); } catch { return needAuth(); } }
   await sync();
 }
 function waitGis() { return new Promise(r => { const c = () => window.google?.accounts?.oauth2 ? r() : setTimeout(c, 100); c(); }); }
@@ -820,6 +856,7 @@ function home() {
   return `<div class="head"><div class="row">${tabs('sub')}<button class="ib" data-act="search" aria-label="검색">${ic.find}</button><button class="ib" data-act="gsort" aria-label="정렬">${ic.sort}</button><button class="ib" data-act="menu" aria-label="메뉴">${ic.more}</button></div><div class="meta">그룹 ${data.groups.length}개 · 채널 ${subs.length}개</div></div>
   <div class="main">
     ${fresh.length ? `<div class="sec"><h2>새로 올라온 영상</h2><span class="badge">${fresh.length}</span></div><div class="strip">${fresh.slice(0, 30).map(vCard).join('')}</div>` : ''}
+    ${token && !load('rt', null) ? `<button class="notice" data-act="login" style="width:calc(100% - 36px)">로그인이 풀리지 않게 하기<b>켜기 ›</b></button>` : ''}
     ${un.length ? `<button class="notice" data-act="organize" style="width:calc(100% - 36px)">미분류 채널 ${un.length}개<b>정리하기 ›</b></button>` : ''}
     <div style="padding-top:6px">${gs.map(g => {
       const list = chOf(g); const n = newCount(list);
@@ -958,6 +995,7 @@ function render() {
   const narrow = { home, group: groupView, organize, reorder, review, pl: plView, plv: plvView, search, deck }[view.name]?.() || home();
   const showWide = view.name === 'home' || view.name === 'group' || view.name === 'pl' || view.name === 'plv';
   const html = (showWide ? `<div class="narrow app">${narrow}</div>${wide()}` : `<div class="app ${['review', 'search'].includes(view.name) ? 'rv' : ''}">${narrow}</div>`) + (authNeeded ? '<button class="relog" data-act="login">다시 연결</button>' : '');
+  document.body.classList.toggle('has-relog', authNeeded);
   const key = [view.name, view.id, view.wg, view.ps, view.filter, view.gid, load('gtab', 'ch')].join('|');
   const pos = SCR.map((q, i) => i && key !== lastKey ? [] : [...$app.querySelectorAll(q)].map(e => [e.scrollTop, e.scrollLeft]));
   $app.innerHTML = html;
@@ -996,7 +1034,7 @@ $app.addEventListener('click', e => {
   if (d.up || d.dn) { const i = +(d.up ?? d.dn), j = d.up ? i - 1 : i + 1; [data.groups[i], data.groups[j]] = [data.groups[j], data.groups[i]]; data.sort.groups = 'manual'; save(); return render(); }
   const cur = () => data.groups.find(x => x.id === (view.name === 'group' ? view.id : view.wg));
   switch (d.act) {
-    case 'login': auth(load('acct', 0) ? '' : 'select_account').then(() => { authNeeded = false; keep('acct', 1); return sync(); }).catch(() => toast('로그인 실패')); break;
+    case 'login': login(); break;
     case 'home': go({ name: 'home', wg: view.wg }); break;
     case 'backg': go({ name: 'group', id: view.gid }); break;
     case 'gsort': choose('그룹 정렬', groupSorts, data.sort.groups, v => { data.sort.groups = v; save(); render(); }); break;
