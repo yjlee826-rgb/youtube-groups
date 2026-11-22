@@ -197,11 +197,13 @@ button.sec{width:100%;text-align:left}
 .brand{display:flex;align-items:center;gap:12px;padding:36px 18px 22px;color:var(--sub);font-size:12px}
 .brand img{width:40px;height:40px;border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 60%,transparent)}
 .brand span{display:flex;flex-direction:column;gap:2px}
-.brand b{color:var(--dot);font-size:14px;font-weight:700;letter-spacing:.02em}
+@font-face{font-family:'HouseYJ';src:url('../fonts/brand-house.woff2') format('woff2');font-display:block}
+.bm{font-family:'HouseYJ',serif;font-weight:600;letter-spacing:.08em}   /* House of YJ 글씨 (Cormorant SC, 작은 대문자) */
+.brand b{color:var(--dot);font-size:17px}
 .logo-s.seal{border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 60%,transparent)}
 .rbrand{display:flex;align-items:center;gap:12px;padding:0 10px 22px}
 .rbrand img{width:44px;height:44px;border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 70%,transparent)}
-.rbrand span{color:var(--gold);font-size:16px;font-weight:700;letter-spacing:.02em}
+.rbrand span{color:var(--gold);font-size:19px}
 @font-face{font-family:'DarakA';src:url('../fonts/darak-A.woff2') format('woff2');font-display:block}
 @font-face{font-family:'DarakB';src:url('../fonts/darak-B.woff2') format('woff2');font-display:block}
 @font-face{font-family:'DarakC';src:url('../fonts/darak-C.woff2') format('woff2');font-display:block}
@@ -250,7 +252,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23z';
+const VER = '2026-11-24a';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -946,7 +948,7 @@ const pinIc = '<svg class="pin" viewBox="0 0 24 24"><path d="M15 3l6 6-3 1-4 4 1
 const NAV = [['home', '홈', 'home'], ['subs', '구독', 'sub'], ['pl', '재생목록', 'pl'], ['more', '관리', 'more']];
 const topOf = n => ({ group: 'subs', plv: 'pl', feedall: 'home' }[n] || n);
 const tabbar = () => `<nav class="tabbar">${NAV.map(([k, t, i]) => `<button class="tb ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</nav>`;
-const railNav = () => `<div class="rbrand"><img src="../icons/yj-128.png" alt="YJ"><span>${BRAND}</span></div><div class="rnav">${NAV.map(([k, t, i]) => `<button class="rn ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</div><div class="rdiv"></div>`;
+const railNav = () => `<div class="rbrand"><img src="../icons/yj-128.png" alt="YJ"><span class="bm">${BRAND}</span></div><div class="rnav">${NAV.map(([k, t, i]) => `<button class="rn ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</div><div class="rdiv"></div>`;
 const tabs = t => `<div class="tabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const railTabs = t => `<div class="rtabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const plRow = p => `<button class="item" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">${p.count}개</span></span></button>`;
@@ -1053,7 +1055,7 @@ function moreBody() {
     ${row('organize', '채널 분류', '채널을 그룹에 넣고 빼기')}${row('review', '구독 관리', '오래 쉰 채널 찾아 구독 해제')}${row('reorder', '그룹 순서', '그룹 목록 순서 바꾸기')}${row('deck', '나란히 보기', '그룹 여러 개를 한 화면에 (태블릿·PC)')}
     <div class="sec"><h2>앱</h2></div>
     ${extOld() ? row('extupd', '확장 프로그램 새 버전', '크롬 확장 프로그램 화면에서 다락의 새로고침 버튼을 한 번 눌러 주세요') : ''}${row('theme', '화면 테마', th)}${row('wmfont', '이름 서체', `${wmKey()} · ${WM[wmKey()][0]}`)}${row('login', '로그인 유지', load('rt', null) ? '켜짐' : '꺼짐 · 눌러서 켜기')}${row('restore', '이전 상태로 되돌리기', '그룹이 바뀔 때마다 백업 (최근 20개)')}
-    <div class="brand"><img src="../icons/yj-128.png" alt="YJ"><span><b>${BRAND}</b><em class="wm">${APP_NAME}</em></span></div>`;
+    <div class="brand"><img src="../icons/yj-128.png" alt="YJ"><span><b class="bm">${BRAND}</b><em class="wm">${APP_NAME}</em></span></div>`;
 }
 function subsView() {
   const un = unsorted();
