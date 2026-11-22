@@ -250,7 +250,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23x';
+const VER = '2026-11-23y';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -578,11 +578,20 @@ async function loadItems(pid, force) {
       (d.items || []).forEach(v => { const m = v.contentDetails.duration.match(/P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/) || []; out.filter(x => x.vid === v.id).forEach(x => x.dur = (+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0)); });
     } catch (e) { if (e === 'auth') throw e; }
   }
+  // 방금(1분 안) 추가했는데 서버 목록에 아직 없는 곡은 그대로 남겨 둠
+  const ids = new Set(out.map(x => x.vid));
+  (plItems[pid]?.items || []).forEach(x => { if (x.fresh && Date.now() - x.fresh < 60000 && !ids.has(x.vid)) out.push(x); });
   plItems[pid] = { at: Date.now(), items: out };
 }
 // 곡을 넣거나 옮긴 뒤: 지금 목록은 그대로 보여 주고 뒤에서 새로 받아 바꿔 끼움
+// 추가에 성공한 곡은 목록에 바로 붙임 (유튜브 서버에 반영되기까지 몇 초 걸려서, 바로 새로 받으면 아직 안 보임)
+function addLocal(pid, vid, res, from) {
+  const c = plItems[pid]; if (!c) return;
+  const sn = res?.snippet || {};
+  c.items.push({ pi: res?.id || 'tmp' + Date.now(), pos: sn.position ?? c.items.length, vid, title: sn.title || from?.title || '추가한 곡', ch: (sn.videoOwnerChannelTitle || from?.ch || '').replace(/ - Topic$/, ''), thumb: sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || from?.thumb || `https://i.ytimg.com/vi/${vid}/mqdefault.jpg`, dur: from?.dur, fresh: Date.now() });
+}
 const stale = id => { if (plItems[id]) plItems[id].at = 0; };
-function refreshPlv() { if (view.name !== 'plv') return; const id = view.id; loadItems(id).then(() => { if (view.name === 'plv' && view.id === id) render(); }).catch(e => { if (e === 'auth') needAuth(); }); }
+function refreshPlv(wait = 3000) { if (view.name !== 'plv') return; const id = view.id; setTimeout(() => loadItems(id).then(() => { if (view.name === 'plv' && view.id === id) render(); }).catch(e => { if (e === 'auth') needAuth(); }), wait); }
 function showPl(pid) {
   go({ name: 'plv', id: pid, ps: view.ps });
   if (!plItems[pid]) render();
@@ -690,7 +699,7 @@ async function sync(full = true) {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') return flush();
   if (!data) return;
-  if (view.name === 'plv') { stale(view.id); refreshPlv(); } else if (view.name === 'pl') refreshPls();
+  if (view.name === 'plv') { stale(view.id); refreshPlv(0); } else if (view.name === 'pl') refreshPls();
   if (Date.now() - fullAt > 300000) sync(true);
   else if (Date.now() - syncedAt > 60000) sync(false);
   else { if (dirty) driveSave().catch(() => {}); loadLatest(false).then(render).catch(e => e === 'auth' && needAuth()); }
@@ -865,7 +874,7 @@ async function addList(listId, ids) {
     for (const v of src) {
       if (have.has(v)) { dup++; continue; }
       try {
-        await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) });
+        addLocal(id, v, await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) }));
         have.add(v); ok++; const p = pls.find(x => x.id === id); if (p) p.count++;
         if (ok % 5 === 0) toast(`추가하는 중 ${ok}곡`);
       } catch (e) { if (e === 'auth') return needAuth(); keep('pls', pls); stale(id); render(); refreshPlv(); return toast(`${ok}곡 추가하고 멈췄습니다${e === 403 ? ' (오늘 한도)' : ''}`); }
@@ -881,7 +890,7 @@ async function addTo(v, ids) {
     try {
       const c = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=id&maxResults=1&playlistId=${id}&videoId=${v}`);
       if (c.items?.length) { dup++; continue; }
-      await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) });
+      addLocal(id, v, await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) }));
       const p = pls.find(x => x.id === id); if (p) p.count++; stale(id); ok++;
     } catch (e) { if (e === 'auth') return needAuth(); return toast(e === 404 ? '영상을 찾을 수 없습니다' : '추가 실패'); }
   }
@@ -954,7 +963,7 @@ async function bulk(kind, target) {
     let have = null;
     if (target) { await loadItems(target, true); have = new Set(plItems[target].items.map(x => x.vid)); }
     for (const it of items) {
-      if (target && !have.has(it.vid)) { await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: target, resourceId: { kind: 'youtube#video', videoId: it.vid } } }) }); have.add(it.vid); bump(target, 1); }
+      if (target && !have.has(it.vid)) { addLocal(target, it.vid, await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: target, resourceId: { kind: 'youtube#video', videoId: it.vid } } }) }), it); have.add(it.vid); bump(target, 1); }
       if (kind !== 'copy') { await api('https://www.googleapis.com/youtube/v3/playlistItems?id=' + it.pi, { method: 'DELETE' }); plItems[pid].items = plItems[pid].items.filter(x => x.pi !== it.pi); bump(pid, -1); }
       done++; tsel.delete(it.pi); if (done % 5 === 0) { toast(`처리 중 ${done}/${items.length}`); render(); }
     }
