@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="로그인 시험">
+<link rel="manifest" href="manifest.json">
+<title>로그인 시험</title>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+body{margin:0;background:#14100F;color:#F3ECE4;font:16px/1.5 -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+header{background:#6A1022;padding:48px 22px 22px}
+h1{margin:0;font-size:26px}
+#env{color:#EBD3B5;font-size:14px;margin-top:4px}
+main{padding:22px;display:flex;flex-direction:column;gap:12px}
+button{height:52px;border:0;border-radius:14px;font:700 16px inherit;font-family:inherit}
+.p{background:#E4C47E;color:#2A0A12}.s{background:transparent;color:#F3ECE4;border:1px solid #4A3533}
+.row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #3A2C2B;font-size:15px}
+.ok{color:#E4C47E}.bad{color:#E88A9A}
+</style>
+</head>
+<body>
+<header><h1>로그인 시험</h1><div id="env"></div></header>
+<main>
+<button class="p" id="login">Google 로그인</button>
+<button class="s" id="again">다시 받기 (조작 없이)</button>
+<div>
+<div class="row"><span>로그인</span><span id="r1">-</span></div>
+<div class="row"><span>구독 채널</span><span id="r2">-</span></div>
+<div class="row"><span>드라이브 저장</span><span id="r3">-</span></div>
+<div class="row"><span>조작 없이 다시 받기</span><span id="r4">-</span></div>
+</div>
+</main>
+<script>
+{
+  const CLIENT_ID = '123904132689-al5msm3lu9itk3hp3q0dap43vka6ejr8.apps.googleusercontent.com';
+  const SCOPES = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/drive.appdata';
+  const sa = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const ua = navigator.userAgent;
+  document.getElementById('env').textContent = (/iPhone|iPad/.test(ua) ? '아이폰' : /Android/.test(ua) ? '안드로이드' : 'PC') + ' · ' + (sa ? '홈 화면 앱' : '브라우저');
+  const set = (id, ok, text) => { const e = document.getElementById(id); e.textContent = text; e.className = ok ? 'ok' : 'bad'; };
+  let client, token;
+  const api = (url, opt = {}) => fetch(url, { ...opt, headers: { Authorization: 'Bearer ' + token, ...(opt.headers || {}) } }).then(r => r.ok ? r.json() : Promise.reject(r.status));
+  async function run() {
+    try {
+      let n = 0, page = '';
+      do {
+        const d = await api('https://www.googleapis.com/youtube/v3/subscriptions?part=id&mine=true&maxResults=50' + (page ? '&pageToken=' + page : ''));
+        n += d.items.length; page = d.nextPageToken || '';
+      } while (page);
+      set('r2', true, n + '개');
+    } catch (e) { set('r2', false, '실패 ' + e); }
+    try {
+      const meta = { name: 'logintest.json', parents: ['appDataFolder'] };
+      const fd = new FormData();
+      fd.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+      fd.append('file', new Blob([JSON.stringify({ t: Date.now() })], { type: 'application/json' }));
+      await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method: 'POST', body: fd });
+      set('r3', true, '성공');
+    } catch (e) { set('r3', false, '실패 ' + e); }
+  }
+  function init(cb) {
+    client = google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPES, callback: cb, error_callback: e => set('r1', false, e.type || '오류') });
+  }
+  document.getElementById('login').onclick = () => {
+    init(r => { if (r.error) return set('r1', false, r.error); token = r.access_token; set('r1', true, '성공 · ' + Math.round(r.expires_in / 60) + '분'); run(); });
+    client.requestAccessToken();
+  };
+  document.getElementById('again').onclick = () => {
+    init(r => { if (r.error) return set('r4', false, r.error); token = r.access_token; set('r4', true, '성공'); });
+    client.requestAccessToken({ prompt: '' });
+  };
+}
+</script>
+</body>
+</html>
