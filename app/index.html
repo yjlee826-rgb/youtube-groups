@@ -187,6 +187,7 @@ function sortGroups(list) {
   const a = [...list];
   if (m === 'name') a.sort((x, y) => x.name.localeCompare(y.name, 'ko'));
   if (m === 'new') a.sort((x, y) => newCount(chOf(y)) - newCount(chOf(x)));
+  if (m === 'recent') { const last = g => Math.max(0, ...g.ch.map(c => latest[c]?.t || 0)); a.sort((x, y) => last(y) - last(x)); }
   return a;
 }
 function sortChannels(list, g) {
@@ -409,6 +410,7 @@ function chMenu(id) {
   });
 }
 const vidOf = x => (String(x).match(/(?:[?&]v=|youtu\.be\/|shorts\/|live\/|embed\/)([\w-]{11})/) || String(x).trim().match(/^([\w-]{11})$/) || [])[1];
+const listOf = x => (String(x).match(/[?&]list=([\w-]+)/) || [])[1];
 function openPl(id) { location.href = `https://music.youtube.com/playlist?list=${id}`; }
 function playTrack(pid, vid) { location.href = `https://music.youtube.com/watch?v=${vid}&list=${pid}`; }
 function itemMenu(pid, vid, pi) {
@@ -452,7 +454,7 @@ function addDlg(url, pre) {
   const d = document.createElement('div'); d.className = 'dlg';
   const picked = new Set(pre ? [pre] : []);
   const draw = () => { const v = d.querySelector('input')?.value ?? url;
-    d.innerHTML = `<div class="box"><b style="font-size:17px">재생목록에 넣기</b><input placeholder="유튜브·유튜브 뮤직 영상 주소" value="${esc(v)}" inputmode="url"><div class="chips">${pls.map(p => `<button class="chip ${picked.has(p.id) ? 'on' : ''}" data-pk="${p.id}">${esc(p.title)}</button>`).join('')}</div><div class="btns"><button class="btn s" data-x="c">취소</button><button class="btn p" data-x="ok" ${picked.size ? '' : 'disabled'}>넣기</button></div></div>`; };
+    d.innerHTML = `<div class="box"><b style="font-size:17px">재생목록에 넣기</b><input placeholder="곡·영상·앨범 주소" value="${esc(v)}" inputmode="url"><div class="chips">${pls.map(p => `<button class="chip ${picked.has(p.id) ? 'on' : ''}" data-pk="${p.id}">${esc(p.title)}</button>`).join('')}</div><div class="btns"><button class="btn s" data-x="c">취소</button><button class="btn p" data-x="ok" ${picked.size ? '' : 'disabled'}>넣기</button></div></div>`; };
   draw(); document.body.append(d);
   if (!url) d.querySelector('input').focus();
   d.onclick = e => {
@@ -461,8 +463,39 @@ function addDlg(url, pre) {
     if (k) { picked.has(k.dataset.pk) ? picked.delete(k.dataset.pk) : picked.add(k.dataset.pk); return draw(); }
     const x = e.target.closest('[data-x]')?.dataset.x;
     if (x === 'c') d.remove();
-    if (x === 'ok') { const v = vidOf(d.querySelector('input').value); if (!v) return toast('영상 주소를 확인해 주세요'); d.remove(); addTo(v, [...picked]); }
+    if (x === 'ok') {
+      const u = d.querySelector('input').value, v = vidOf(u), l = listOf(u);
+      if (v) { d.remove(); return addTo(v, [...picked]); }            // 곡·영상 하나 (재생목록 안에서 공유한 곡도 곡 하나로)
+      if (l) { d.remove(); return addList(l, [...picked]); }           // 앨범·재생목록 통째로
+      toast(/browse\/MPRE/.test(u) ? '앨범의 공유 버튼으로 복사한 주소를 넣어 주세요' : '주소를 확인해 주세요');
+    }
   };
+}
+async function addList(listId, ids) {
+  let src = [], page = '';
+  try {
+    do {
+      const d = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&maxResults=50&playlistId=${listId}` + (page ? '&pageToken=' + page : ''));
+      src = src.concat(d.items.map(i => i.contentDetails.videoId)); page = d.nextPageToken || '';
+    } while (page);
+  } catch (e) { if (e === 'auth') return needAuth(); return toast('이 목록은 가져올 수 없습니다'); }
+  let ok = 0, dup = 0;
+  for (const id of ids) {
+    try { await loadItems(id, true); } catch (e) { if (e === 'auth') return needAuth(); return toast('불러오기 실패'); }
+    const have = new Set(plItems[id].items.map(x => x.vid));
+    for (const v of src) {
+      if (have.has(v)) { dup++; continue; }
+      try {
+        await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) });
+        have.add(v); ok++; const p = pls.find(x => x.id === id); if (p) p.count++;
+        if (ok % 5 === 0) toast(`넣는 중 ${ok}곡`);
+      } catch (e) { if (e === 'auth') return needAuth(); keep('pls', pls); delete plItems[id]; render(); return toast(`${ok}곡 넣고 멈췄습니다${e === 403 ? ' (오늘 한도)' : ''}`); }
+    }
+    delete plItems[id];
+  }
+  keep('pls', pls); render();
+  if (view.name === 'plv') loadItems(view.id).then(render).catch(() => {});
+  toast(ok ? `${ok}곡 넣었습니다${dup ? ` · ${dup}곡은 이미 있음` : ''}` : '이미 모두 들어 있습니다');
 }
 async function addTo(v, ids) {
   let ok = 0, dup = 0;
@@ -495,7 +528,7 @@ function choose(title, opts, cur, ok) {
   document.body.append(d);
   d.onclick = e => { const b = e.target.closest('[data-v]'); if (b) ok(b.dataset.v); d.remove(); };
 }
-const groupSorts = [['manual', '직접 정렬'], ['name', '이름순'], ['new', '새 영상 많은 순']];
+const groupSorts = [['manual', '직접 정렬'], ['recent', '최근 업로드 순'], ['new', '새 영상 많은 순'], ['name', '이름순']];
 const chSorts = [['recent', '최근 업로드 순'], ['name', '이름순'], ['manual', '직접 정렬']];
 const label = (list, v) => list.find(x => x[0] === v)[1];
 
