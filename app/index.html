@@ -231,7 +231,10 @@ button.sec{width:100%;text-align:left}
   .col .top{padding:calc(env(safe-area-inset-top) + 28px) 22px 14px;border-bottom:1px solid var(--line)}
   .col .top h2{margin:0;font-size:28px}
   .col .list{flex:1;overflow-y:auto}
-  .col .item.sel{background:var(--card)}
+  .col .item.sel,.col .item[aria-current=true]{background:var(--card)}
+  .col .item[aria-current=true]{box-shadow:inset 3px 0 var(--gold)}
+  .chopen{align-self:center;flex:none;font-size:12px;color:var(--dot);padding:4px 6px;border-radius:6px}
+  .chopen:hover{text-decoration:underline}
   .feed{flex:1;min-width:0;overflow-y:auto;padding:calc(env(safe-area-inset-top) + 24px) 32px 32px}
   .bar{display:flex;gap:10px;align-items:center;margin-bottom:20px}
   .bar .pill{border-color:var(--line);color:var(--ink)}
@@ -246,7 +249,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23u';
+const VER = '2026-11-23v';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -903,13 +906,13 @@ const label = (list, v) => list.find(x => x[0] === v)[1];
 
 /* ---------- 화면 조각 ---------- */
 const groupsOf = id => data.groups.filter(g => g.ch.includes(id)).map(g => g.name);
-const chRow = (s, attr = '', showG = false) => {
+const chRow = (s, attr = '', showG = false, pick = false) => {
   const l = latest[s.id] || {}, gn = showG ? groupsOf(s.id) : null;
   const n = isNew(s.id);
   return `<button class="item ${n ? 'new' : ''} ${s.off ? 'off' : ''}" data-ch="${s.id}" ${attr}>
     <span class="av" style="background-image:url('${esc(s.thumb)}')"></span>
     <span class="body"><span class="name">${curGroup()?.pin?.includes(s.id) && ['group', 'subs'].includes(view.name) ? pinIc : ''}${esc(s.title)}${gn ? `<span class="gtags">${gn.length ? gn.map(n => `<i>${esc(n)}</i>`).join('') : '<i class="none">그룹 없음</i>'}</span>` : ''}</span><span class="vs">${s.off ? '구독 안 함 · ' : ''}${l.title ? esc(l.title) + ' · ' + ago(l.t) : (l.at ? '영상 없음' : '')}</span></span>
-    ${n ? `<span class="badge" aria-label="새 영상">${newVids(s.id).length}</span>` : ''}</button>`;
+    ${n ? `<span class="badge" aria-label="새 영상">${newVids(s.id).length}</span>` : ''}${pick ? `<span class="chopen" data-open="${s.id}">채널 열기</span>` : ''}</button>`;
 };
 const nd = v => isNewV(v.ch, v) ? '<span class="nd"></span>' : '';
 const vCard = v => `<button class="vcard ${isNewV(v.ch, v) ? '' : 'seen'}" data-v="${v.ch}" data-vid="${v.vid}" style="text-align:left">
@@ -1158,6 +1161,7 @@ function wide() {
   const g = data.groups.find(x => x.id === view.wg);
   const list = view.wg === 'un' ? un : g ? sortChannels(chOf(g), g) : [];
   const title = view.wg === 'un' ? '그룹 없음' : g ? g.name : '';
+  const wc = list.find(s => s.id === view.wc);
   return `<div class="wide">
     <div class="rail">${railNav()}<div class="rlabel">그룹</div>
       ${un.length ? `<button class="rg un ${view.wg === 'un' ? 'sel' : ''}" data-wg="un"><span>그룹 없음</span><i>${un.length}</i></button>` : ''}
@@ -1166,12 +1170,12 @@ function wide() {
       <span style="flex:1"></span><button class="rg" data-act="search">검색</button><button class="rg" data-act="deck">나란히 보기</button>
     </div>
     <div class="col"><div class="top"><h2>${esc(title)}</h2><div class="vs" style="margin-top:4px">채널 ${list.length}개</div></div>
-      <div class="list">${list.map(s => chRow(s)).join('')}</div></div>
+      <div class="list">${list.map(s => chRow(s, view.wc === s.id ? 'aria-current="true"' : '', false, true)).join('')}</div></div>
     <div class="feed"><div class="bar">
-      ${g ? `<button class="pill" data-act="csort">채널: ${label(chSorts, data.sort.channels)}</button><button class="pill" data-act="gmenu">그룹 설정</button>` : ''}${newCount(list) ? '<button class="pill" data-act="allseen">모두 봤음</button>' : ''}
+      ${wc ? `<button class="pill p" data-act="wcclear">${esc(wc.title)} · 전체 채널 보기</button>` : ''}${g ? `<button class="pill" data-act="csort">채널: ${label(chSorts, data.sort.channels)}</button><button class="pill" data-act="gmenu">그룹 설정</button>` : ''}${newCount(list) ? '<button class="pill" data-act="allseen">모두 봤음</button>' : ''}
       <span style="flex:1"></span><button class="pill" data-act="gsort">그룹: ${label(groupSorts, data.sort.groups)}</button>
       <button class="pill p" data-act="organize-w">채널 분류</button></div>
-      <div class="grid">${weekFeed(list, vCard, '<div class="divi" style="grid-column:1/-1">이전 · 이번 주에 안 올린 채널</div>', '')}</div></div>
+      <div class="grid">${wc ? (feedOf([wc]).map(vCard).join('') || '<div class="vs">불러온 영상이 없습니다</div>') : weekFeed(list, vCard, '', '')}</div></div>
   </div>`;
 }
 
@@ -1208,8 +1212,10 @@ $app.addEventListener('contextmenu', e => { const t = lpT(e); if (t) { e.prevent
 $app.addEventListener('input', e => { if (e.target.id === 'q') { view.q = e.target.value; document.getElementById('sr').innerHTML = searchRes(view.q); } });
 $app.addEventListener('click', e => {
   if (pressed) { pressed = false; return; }
+  const op = e.target.closest('[data-open]'); if (op) return openChannel(op.dataset.open);
   const t = e.target.closest('button,[data-ch],[data-ts]'); if (!t) return;
   const d = t.dataset;
+  if (d.ch && t.closest('.wide .col')) { view.wc = view.wc === d.ch ? null : d.ch; return render(); }   // PC 그룹 화면: 누르면 오른쪽에 그 채널 영상만
   if (d.ch) return openChannel(d.ch);
   if (d.mv) return playTrack(d.pid, d.mv);
   if (d.ts) { tsel.has(d.ts) ? tsel.delete(d.ts) : tsel.add(d.ts); return render(); }
@@ -1221,7 +1227,7 @@ $app.addEventListener('click', e => {
   if (d.ps) { view.ps = d.ps; if (view.name === 'plv') view.name = 'pl'; return render(); }
   if (d.v) return openVideo(d.v, d.vid);
   if (d.g) return go({ name: 'group', id: d.g });
-  if (d.wg) { view.wg = d.wg; view.id = d.wg; return render(); }
+  if (d.wg) { view.wg = d.wg; view.id = d.wg; view.wc = null; return render(); }
   if (d.rs) return toggleSub(d.rs, true);
   if (d.sel) { sel.has(d.sel) ? sel.delete(d.sel) : sel.add(d.sel); return render(); }
   if (d.pick) { pick.has(d.pick) ? pick.delete(d.pick) : pick.add(d.pick); return render(); }
@@ -1242,6 +1248,7 @@ $app.addEventListener('click', e => {
     case 'tab-sub': go({ name: 'subs', wg: view.wg }); break;
     case 'theme': themeDlg(); break;
     case 'wmfont': wmDlg(); break;
+    case 'wcclear': view.wc = null; render(); break;
     case 'pl': case 'tab-pl': go({ name: 'pl', ps: view.ps }); refreshPls(); break;
     case 'plback': go({ name: 'pl', ps: view.ps }); break;
     case 'pledit': view.edit = !view.edit; tsel.clear(); render(); break;
