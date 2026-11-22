@@ -79,6 +79,17 @@ a{color:inherit;text-decoration:none}
 .has-relog .toast,.has-tb .toast{bottom:calc(env(safe-area-inset-bottom) + 84px)}
 .has-tb.has-relog .toast{bottom:calc(env(safe-area-inset-bottom) + 140px)}
 .has-tb .relog{bottom:calc(env(safe-area-inset-bottom) + 80px)}
+/* PC·태블릿 아래 가운데 알약 모양 탭: 왼쪽 메뉴(264px)를 뺀 내용 영역의 가운데 */
+.fbar{display:none}
+@media (min-width:900px){
+  .fbar{display:flex;position:fixed;bottom:calc(env(safe-area-inset-bottom) + 20px);left:calc(50% + 132px);transform:translateX(-50%);gap:2px;padding:5px;border-radius:999px;background:var(--bur);box-shadow:0 6px 24px rgba(0,0,0,.28),0 0 0 1px color-mix(in srgb,var(--gold) 35%,transparent);z-index:6}
+  .fb{display:flex;align-items:center;gap:7px;height:40px;padding:0 16px;border-radius:999px;color:var(--onbur);font-size:14px;font-weight:500}
+  .fb svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+  .fb.on{background:var(--gold);color:var(--gold-ink);font-weight:700}
+  .has-fb .toast{bottom:calc(env(safe-area-inset-bottom) + 84px);left:calc(50% + 132px)}
+  .has-fb .relog{bottom:calc(env(safe-area-inset-bottom) + 84px)}
+  .feed,.wsub .app .main,.col .list{padding-bottom:96px}
+}
 .toast button{margin-left:14px;font-weight:700;text-decoration:underline}
 .dlg{position:fixed;top:0;left:0;right:0;height:var(--app-h,100%);background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:9}
 .dlg .box{background:var(--card);width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:20px 18px calc(env(safe-area-inset-bottom) + 18px);display:flex;flex-direction:column;gap:10px}
@@ -255,7 +266,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-24d';
+const VER = '2026-11-24e';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -950,6 +961,7 @@ const pinIc = '<svg class="pin" viewBox="0 0 24 24"><path d="M15 3l6 6-3 1-4 4 1
 /* ---------- 휴대폰 화면 ---------- */
 const NAV = [['home', '홈', 'home'], ['subs', '구독', 'sub'], ['pl', '재생목록', 'pl'], ['more', '관리', 'more']];
 const topOf = n => ({ group: 'subs', plv: 'pl', feedall: 'home' }[n] || n);
+const fbar = () => `<nav class="fbar">${NAV.map(([k, t, i]) => `<button class="fb ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}<span>${t}</span></button>`).join('')}</nav>`;
 const tabbar = () => `<nav class="tabbar">${NAV.map(([k, t, i]) => `<button class="tb ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</nav>`;
 const railNav = () => `<div class="rbrand"><img src="../icons/yj-ring.svg" alt="YJ"><span class="bm">${BRAND}</span></div><div class="rnav">${NAV.map(([k, t, i]) => `<button class="rn ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</div><div class="rdiv"></div>`;
 const tabs = t => `<div class="tabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
@@ -1220,9 +1232,10 @@ function render() {
   const html = (showWide ? `<div class="narrow app ${tb ? 'tbar' : ''}">${narrow}${tb ? tabbar() : ''}</div>${wide()}` : (isWide() && view.name !== 'deck' ? `<div class="wsub"><div class="rail" style="width:264px;flex:none;background:var(--bur);display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top) + 28px) 12px 20px">${railNav()}</div><div class="app rv">${narrow}</div></div>` : `<div class="app ${['review', 'search'].includes(view.name) ? 'rv' : ''} ${tb ? 'tbar' : ''}">${narrow}${tb ? tabbar() : ''}</div>`)) + (authNeeded ? '<button class="relog" data-act="login">다시 로그인</button>' : '');
   document.body.classList.toggle('has-relog', authNeeded);
   document.body.classList.toggle('has-tb', tb && !isWide());
+  document.body.classList.toggle('has-fb', isWide() && view.name !== 'deck');
   const key = [view.name, view.id, view.wg, view.ps, view.filter, view.gid, load('gtab', 'ch')].join('|');
   const pos = SCR.map((q, i) => i && key !== lastKey ? [] : [...$app.querySelectorAll(q)].map(e => [e.scrollTop, e.scrollLeft]));
-  $app.innerHTML = html;
+  $app.innerHTML = html + (isWide() && view.name !== 'deck' ? fbar() : '');
   SCR.forEach((q, i) => [...$app.querySelectorAll(q)].forEach((e, k) => { const p = pos[i][k]; if (p && (p[0] || p[1])) { e.scrollTop = p[0]; e.scrollLeft = p[1]; } }));
   lastKey = key;
 }
