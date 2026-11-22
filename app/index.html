@@ -246,7 +246,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23r';
+const VER = '2026-11-23s';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -693,7 +693,9 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------- 동작 ---------- */
 // 휴대폰·태블릿은 주소로 넘기면 유튜브 앱이 열리고, PC는 새 탭으로 엶 (앱 화면이 유튜브로 바뀌어 버리지 않게)
-const openUrl = u => { matchMedia('(any-pointer: coarse)').matches ? location.href = u : window.open(u, '_blank'); };
+// 크롬 옆 패널(확장 프로그램) 안에서 열렸으면 옆의 유튜브 탭에서 열도록 패널에 부탁함
+const inPanel = window.top !== window;
+const openUrl = u => { if (inPanel) return parent.postMessage({ dl: 'open', url: u }, '*'); matchMedia('(any-pointer: coarse)').matches ? location.href = u : window.open(u, '_blank'); };
 function openChannel(id) {
   data.seen[id] = Date.now(); save(1); render();
   openUrl(`https://www.youtube.com/channel/${id}/videos`);
