@@ -243,7 +243,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23o';
+const VER = '2026-11-23p';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -569,6 +569,9 @@ async function loadItems(pid, force) {
   }
   plItems[pid] = { at: Date.now(), items: out };
 }
+// 곡을 넣거나 옮긴 뒤: 지금 목록은 그대로 보여 주고 뒤에서 새로 받아 바꿔 끼움
+const stale = id => { if (plItems[id]) plItems[id].at = 0; };
+function refreshPlv() { if (view.name !== 'plv') return; const id = view.id; loadItems(id).then(() => { if (view.name === 'plv' && view.id === id) render(); }).catch(e => { if (e === 'auth') needAuth(); }); }
 function showPl(pid) {
   go({ name: 'plv', id: pid, ps: view.ps });
   if (!plItems[pid]) render();
@@ -831,12 +834,11 @@ async function addList(listId, ids) {
         await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) });
         have.add(v); ok++; const p = pls.find(x => x.id === id); if (p) p.count++;
         if (ok % 5 === 0) toast(`넣는 중 ${ok}곡`);
-      } catch (e) { if (e === 'auth') return needAuth(); keep('pls', pls); delete plItems[id]; render(); return toast(`${ok}곡 넣고 멈췄습니다${e === 403 ? ' (오늘 한도)' : ''}`); }
+      } catch (e) { if (e === 'auth') return needAuth(); keep('pls', pls); stale(id); render(); refreshPlv(); return toast(`${ok}곡 넣고 멈췄습니다${e === 403 ? ' (오늘 한도)' : ''}`); }
     }
-    delete plItems[id];
+    stale(id);
   }
-  keep('pls', pls); render();
-  if (view.name === 'plv') loadItems(view.id).then(render).catch(() => {});
+  keep('pls', pls); render(); refreshPlv();
   toast(ok ? `${ok}곡 넣었습니다${dup ? ` · ${dup}곡은 이미 있음` : ''}` : '이미 모두 들어 있습니다');
 }
 async function addTo(v, ids) {
@@ -846,10 +848,10 @@ async function addTo(v, ids) {
       const c = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=id&maxResults=1&playlistId=${id}&videoId=${v}`);
       if (c.items?.length) { dup++; continue; }
       await api('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { playlistId: id, resourceId: { kind: 'youtube#video', videoId: v } } }) });
-      const p = pls.find(x => x.id === id); if (p) p.count++; delete plItems[id]; ok++;
+      const p = pls.find(x => x.id === id); if (p) p.count++; stale(id); ok++;
     } catch (e) { if (e === 'auth') return needAuth(); return toast(e === 404 ? '영상을 찾을 수 없습니다' : '넣기 실패'); }
   }
-  keep('pls', pls); render();
+  keep('pls', pls); render(); refreshPlv();
   toast(ok ? `${ok}곳에 넣었습니다${dup ? ` · ${dup}곳은 이미 있음` : ''}` : '이미 들어 있습니다');
 }
 function themeDlg() { choose('화면 테마', [['auto', '기기 설정 따르기'], ['light', '밝게'], ['dark', '어둡게']], load('theme', 'auto'), v => { keep('theme', v); setTheme(v); }); }
@@ -922,7 +924,7 @@ async function bulk(kind, target) {
       done++; tsel.delete(it.pi); if (done % 5 === 0) { toast(`처리 중 ${done}/${items.length}`); render(); }
     }
   } catch (e) { if (e === 'auth') return needAuth(); toast(`${done}곡 처리하고 멈췄습니다${e === 403 ? ' (오늘 한도)' : ''}`); }
-  if (target) delete plItems[target];
+  if (target) stale(target);
   keep('pls', pls); render();
   if (done === items.length) toast(`${done}곡을 ${{ move: '옮겼습니다', copy: '복사했습니다', rm: '뺐습니다' }[kind]}`);
 }
