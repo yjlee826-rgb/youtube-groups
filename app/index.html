@@ -42,7 +42,8 @@ a{color:inherit;text-decoration:none}
 .vs{font-size:14px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .notice{margin:14px 18px 4px;height:50px;padding:0 14px 0 16px;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;gap:10px;font-size:15px;background:var(--card)}
 .notice b{margin-left:auto}
-.item{display:flex;align-items:center;gap:14px;padding:0 18px;min-height:66px;width:100%;text-align:left}
+.item{display:flex;align-items:center;gap:14px;padding:0 18px;min-height:66px;width:100%;text-align:left;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.off .av,.off .name{opacity:.45}
 .item .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;border-bottom:1px solid var(--line);min-height:66px;justify-content:center}
 .item:last-child .body{border-bottom:0}
 .name{font-size:16px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -111,7 +112,7 @@ a{color:inherit;text-decoration:none}
 <script>
 {
 const CLIENT_ID = '123904132689-al5msm3lu9itk3hp3q0dap43vka6ejr8.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/drive.appdata';
+const SCOPES = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/drive.appdata';
 const FILE = 'groups.json';
 const LS = k => 'yg.' + k;
 const $app = document.getElementById('app');
@@ -130,6 +131,7 @@ const ic = {
 
 let token = null, tokenExp = 0, client = null;
 let subs = load('subs', []);
+let extra = load('extra', {});
 let latest = load('latest', {});
 let data = load('data', null);
 let fileId = load('fileId', null);
@@ -151,11 +153,12 @@ const ago = t => {
 const toast = m => { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 1800); };
 
 const subIds = () => new Set(subs.map(s => s.id));
-const subOf = id => subs.find(s => s.id === id);
+const subOf = id => subs.find(s => s.id === id) || (extra[id] && { ...extra[id], off: true });
 const isNew = id => { const l = latest[id]; return !!(l && l.t > (data.seen[id] ?? data.since)); };
 const grouped = () => { const s = new Set(); data.groups.forEach(g => g.ch.forEach(c => s.add(c))); return s; };
 const unsorted = () => { const g = grouped(); return subs.filter(s => !g.has(s.id)); };
-const chOf = g => { const ids = subIds(); return g.ch.filter(c => ids.has(c)).map(subOf); };
+const chOf = g => g.ch.map(subOf).filter(Boolean);
+const known = () => { const ids = subIds(); return subs.concat([...grouped()].filter(c => !ids.has(c) && extra[c]).map(subOf)); };
 const newCount = list => list.filter(s => isNew(s.id)).length;
 
 function sortGroups(list) {
@@ -180,7 +183,7 @@ function auth(prompt) {
     if (!window.google?.accounts?.oauth2) return rej('gis');
     client = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID, scope: SCOPES,
-      callback: r => { if (r.error) return rej(r.error); token = r.access_token; tokenExp = Date.now() + (r.expires_in - 60) * 1000; keep('tok', { token, tokenExp }); res(); },
+      callback: r => { if (r.error) return rej(r.error); token = r.access_token; tokenExp = Date.now() + (r.expires_in - 60) * 1000; keep('tok', { token, tokenExp, scope: SCOPES }); res(); },
       error_callback: e => rej(e.type || 'err')
     });
     client.requestAccessToken({ prompt });
@@ -230,10 +233,20 @@ async function loadSubs() {
   let out = [], page = '';
   do {
     const d = await api('https://www.googleapis.com/youtube/v3/subscriptions?part=snippet&mine=true&maxResults=50' + (page ? '&pageToken=' + page : ''));
-    out = out.concat(d.items.map(i => ({ id: i.snippet.resourceId.channelId, title: i.snippet.title, thumb: i.snippet.thumbnails?.default?.url || '' })));
+    out = out.concat(d.items.map(i => ({ id: i.snippet.resourceId.channelId, sid: i.id, title: i.snippet.title, thumb: i.snippet.thumbnails?.default?.url || '' })));
     page = d.nextPageToken || '';
   } while (page);
   subs = out; keep('subs', subs);
+}
+async function loadExtra() {
+  const ids = subIds();
+  const need = [...grouped()].filter(c => !ids.has(c) && !extra[c]);
+  for (let i = 0; i < need.length; i += 50) {
+    const part = need.slice(i, i + 50);
+    const d = await api('https://www.googleapis.com/youtube/v3/channels?part=snippet&maxResults=50&id=' + part.join(','));
+    (d.items || []).forEach(c => extra[c.id] = { id: c.id, title: c.snippet.title, thumb: c.snippet.thumbnails?.default?.url || '' });
+    keep('extra', extra);
+  }
 }
 async function latestOf(id) {
   for (const p of ['UULF', 'UU']) {
@@ -247,7 +260,7 @@ async function latestOf(id) {
   return { t: 0, at: Date.now() };
 }
 async function loadLatest(force) {
-  const stale = subs.filter(s => force || !latest[s.id] || Date.now() - latest[s.id].at > 15 * 60000);
+  const stale = known().filter(s => force || !latest[s.id] || Date.now() - latest[s.id].at > 15 * 60000);
   for (let i = 0; i < stale.length; i += 8) {
     const part = stale.slice(i, i + 8);
     const r = await Promise.all(part.map(s => latestOf(s.id)));
@@ -257,11 +270,28 @@ async function loadLatest(force) {
   }
 }
 
+/* ---------- 가져오기 (주소 #import=…, 저장소에는 데이터 없음) ---------- */
+if (location.hash.startsWith('#import=')) {
+  try { keep('pending', JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(8)))))); } catch {}
+  history.replaceState(null, '', location.pathname);
+}
+function applyImport() {
+  const p = load('pending', null);
+  if (!p) return false;
+  p.forEach(({ g, c }) => {
+    let grp = data.groups.find(x => x.name === g);
+    if (!grp) data.groups.push(grp = { id: uid(), name: g, ch: [] });
+    c.forEach(id => { if (!grp.ch.includes(id)) grp.ch.push(id); });
+  });
+  localStorage.removeItem(LS('pending'));
+  return true;
+}
+
 /* ---------- 시작 ---------- */
 function needAuth() { view = { name: 'auth' }; render(); }
 async function start() {
   const t = load('tok', null);
-  if (t && Date.now() < t.tokenExp) { token = t.token; tokenExp = t.tokenExp; }
+  if (t && t.scope === SCOPES && Date.now() < t.tokenExp) { token = t.token; tokenExp = t.tokenExp; }
   if (data) render(); else { view = { name: 'loading' }; render(); }
   if (!token) {
     await waitGis();
@@ -275,10 +305,11 @@ async function sync() {
     const remote = await driveLoad();
     if (remote && (!data || (remote.updated || 0) >= (data.updated || 0))) data = remote;
     if (!data) data = { v: 1, groups: [], seen: {}, since: Date.now(), sort: { groups: 'manual', channels: 'recent' }, updated: 0 };
+    if (applyImport()) { await driveSave(); toast('그룹을 가져왔습니다'); }
     keep('data', data);
     if (view.name === 'loading' || view.name === 'auth') view = { name: 'home' };
     render();
-    await loadSubs(); render();
+    await loadSubs(); await loadExtra(); render();
     await loadLatest(false);
   } catch (e) { if (e === 'auth') needAuth(); else toast('불러오기 실패'); }
 }
@@ -292,6 +323,21 @@ function openChannel(id) {
 function openVideo(id, vid) {
   data.seen[id] = Date.now(); save();
   location.href = `https://www.youtube.com/watch?v=${vid}`;
+}
+function chMenu(id) {
+  const s = subOf(id); if (!s) return;
+  choose(s.title, s.off ? [['sub', '구독']] : [['unsub', '구독 취소', 'danger']], '', async v => {
+    try {
+      if (v === 'sub') {
+        const r = await api('https://www.googleapis.com/youtube/v3/subscriptions?part=snippet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snippet: { resourceId: { kind: 'youtube#channel', channelId: id } } }) });
+        subs.push({ id, sid: r.id, title: s.title, thumb: s.thumb }); toast('구독했습니다');
+      } else {
+        await api('https://www.googleapis.com/youtube/v3/subscriptions?id=' + s.sid, { method: 'DELETE' });
+        subs = subs.filter(x => x.id !== id); extra[id] = { id, title: s.title, thumb: s.thumb }; keep('extra', extra); toast('구독을 취소했습니다');
+      }
+      keep('subs', subs); render();
+    } catch (e) { e === 'auth' ? needAuth() : toast(e === 403 ? '권한이 없습니다. 다시 로그인해 주세요' : '실패했습니다'); }
+  });
 }
 function go(v) { view = v; sel.clear(); pick.clear(); render(); document.querySelector('.main, .feed')?.scrollTo(0, 0); }
 function ask(title, value, ok) {
@@ -315,12 +361,12 @@ const chSorts = [['recent', '최근 업로드 순'], ['name', '이름순'], ['ma
 const label = (list, v) => list.find(x => x[0] === v)[1];
 
 /* ---------- 화면 조각 ---------- */
-const chRow = (s, extra = '') => {
+const chRow = (s, attr = '') => {
   const l = latest[s.id] || {};
   const n = isNew(s.id);
-  return `<button class="item ${n ? 'new' : ''}" data-ch="${s.id}" ${extra}>
+  return `<button class="item ${n ? 'new' : ''} ${s.off ? 'off' : ''}" data-ch="${s.id}" ${attr}>
     <span class="av" style="background-image:url('${esc(s.thumb)}')"></span>
-    <span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${l.title ? esc(l.title) + ' · ' + ago(l.t) : (l.at ? '영상 없음' : '')}</span></span>
+    <span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${s.off ? '구독 안 함 · ' : ''}${l.title ? esc(l.title) + ' · ' + ago(l.t) : (l.at ? '영상 없음' : '')}</span></span>
     ${n ? '<span class="dot" aria-label="새 영상"></span>' : ''}</button>`;
 };
 const vCard = s => {
@@ -329,7 +375,7 @@ const vCard = s => {
     <span class="thumb" style="background-image:url('${esc(l.thumb)}')"></span>
     <span class="vt">${esc(l.title)}</span><span class="vs">${esc(s.title)} · ${ago(l.t)}</span></button>`;
 };
-const freshList = () => subs.filter(s => isNew(s.id)).sort((a, b) => latest[b.id].t - latest[a.id].t);
+const freshList = () => known().filter(s => isNew(s.id)).sort((a, b) => latest[b.id].t - latest[a.id].t);
 
 /* ---------- 휴대폰 화면 ---------- */
 function home() {
@@ -362,14 +408,14 @@ function organize() {
   const gid = view.gid || null;
   const f = view.filter || (unsorted().length ? 'un' : 'all');
   view.filter = f;
-  let list = f === 'un' ? unsorted() : gid && f === 'in' ? chOf(data.groups.find(x => x.id === gid)) : subs;
+  let list = f === 'un' ? unsorted() : gid && f === 'in' ? chOf(data.groups.find(x => x.id === gid)) : known();
   list = [...list].sort((a, b) => a.title.localeCompare(b.title, 'ko'));
-  const segs = [['un', `미분류 ${unsorted().length}`], ['all', `전체 ${subs.length}`]];
+  const segs = [['un', `미분류 ${unsorted().length}`], ['all', `전체 ${known().length}`]];
   if (gid) segs.splice(1, 0, ['in', '이 그룹']);
   const gs = sortGroups(data.groups);
   return `<div class="head"><div class="row"><button class="pill" data-act="${gid ? 'backg' : 'home'}" style="border:0;padding:0">취소</button><h1 style="font-size:18px;text-align:center">${sel.size}개 선택</h1><button class="pill" data-act="selall" style="border:0;padding:0">전체</button></div>
     <div class="seg" style="padding:6px 0 16px">${segs.map(s => `<button class="pill" data-f="${s[0]}" style="${s[0] === f ? 'background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:700' : ''}">${s[1]}</button>`).join('')}</div></div>
-  <div class="main" style="padding-bottom:0">${list.map(s => `<button class="item ${sel.has(s.id) ? 'on' : ''}" data-sel="${s.id}"><span class="chk">${ic.chk}</span><span class="av" style="background-image:url('${esc(s.thumb)}')"></span><span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${esc(data.groups.filter(g => g.ch.includes(s.id)).map(g => g.name).join(', ') || '미분류')}</span></span></button>`).join('') || '<div class="center"><span class="vs">정리할 채널이 없습니다</span></div>'}
+  <div class="main" style="padding-bottom:0">${list.map(s => `<button class="item ${sel.has(s.id) ? 'on' : ''} ${s.off ? 'off' : ''}" data-sel="${s.id}"><span class="chk">${ic.chk}</span><span class="av" style="background-image:url('${esc(s.thumb)}')"></span><span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${esc(data.groups.filter(g => g.ch.includes(s.id)).map(g => g.name).join(', ') || '미분류')}</span></span></button>`).join('') || '<div class="center"><span class="vs">정리할 채널이 없습니다</span></div>'}
   <div class="sheet"><b style="font-size:17px">넣을 그룹</b>
     <div class="chips">${gs.map(g => `<button class="chip ${pick.has(g.id) ? 'on' : ''}" data-pick="${g.id}">${esc(g.name)}</button>`).join('')}<button class="chip" data-act="newgroup-pick" style="border-style:dashed;color:var(--sub)">새 그룹</button></div>
     <div class="btns"><button class="btn p" data-act="put" ${sel.size && pick.size ? '' : 'disabled'}>넣기</button><button class="btn s" data-act="pull" ${sel.size && (pick.size || gid) ? '' : 'disabled'}>빼기</button></div></div></div>`;
@@ -416,7 +462,12 @@ function render() {
 }
 
 /* ---------- 입력 ---------- */
+let press = null, pressed = false;
+$app.addEventListener('pointerdown', e => { const t = e.target.closest('[data-ch]'); pressed = false; if (!t) return; press = setTimeout(() => { pressed = true; chMenu(t.dataset.ch); }, 500); });
+['pointerup', 'pointercancel', 'pointermove'].forEach(k => $app.addEventListener(k, e => { if (k !== 'pointermove' || Math.abs(e.movementX) + Math.abs(e.movementY) > 4) clearTimeout(press); }));
+$app.addEventListener('contextmenu', e => { const t = e.target.closest('[data-ch]'); if (t) { e.preventDefault(); clearTimeout(press); if (!pressed) { pressed = true; chMenu(t.dataset.ch); } } });
 $app.addEventListener('click', e => {
+  if (pressed) { pressed = false; return; }
   const t = e.target.closest('button,[data-ch]'); if (!t) return;
   const d = t.dataset;
   if (d.ch) return openChannel(d.ch);
@@ -429,7 +480,7 @@ $app.addEventListener('click', e => {
   if (d.up || d.dn) { const i = +(d.up ?? d.dn), j = d.up ? i - 1 : i + 1; [data.groups[i], data.groups[j]] = [data.groups[j], data.groups[i]]; data.sort.groups = 'manual'; save(); return render(); }
   const cur = () => data.groups.find(x => x.id === (view.name === 'group' ? view.id : view.wg));
   switch (d.act) {
-    case 'login': auth('').then(sync).catch(() => auth('consent').then(sync).catch(() => toast('로그인 실패'))); break;
+    case 'login': auth('select_account').then(sync).catch(() => toast('로그인 실패')); break;
     case 'home': go({ name: 'home', wg: view.wg }); break;
     case 'backg': go({ name: 'group', id: view.gid }); break;
     case 'gsort': choose('그룹 정렬', groupSorts, data.sort.groups, v => { data.sort.groups = v; save(); render(); }); break;
