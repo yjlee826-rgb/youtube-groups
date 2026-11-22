@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "다락",
-  "version": "1.0.0",
-  "description": "크롬 옆 패널에 다락을 띄우고, 누른 채널과 영상은 옆의 유튜브 탭에서 엽니다.",
+  "version": "1.1.0",
+  "description": "툴바 아이콘으로 다락을 탭에서 열고, 다락에서 누른 채널과 영상은 열려 있는 유튜브 탭 하나에서 엽니다.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -12,12 +12,7 @@
   "action": {
     "default_title": "다락 열기"
   },
-  "side_panel": {
-    "default_path": "panel.html"
-  },
-  "permissions": [
-    "sidePanel"
-  ],
+  "permissions": [],
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://music.youtube.com/*"
@@ -25,5 +20,10 @@
   "background": {
     "service_worker": "bg.js"
   },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArHeYRy/7RAZbpT4hRkYcUWDrwKXYT0hqKBJH9hlcaV9fJT5ANq5EZL76ctpBeWhsyP8niJXB+OUQM9fEVCkIZ9r0gg3usboF5C9zKA8jbcEA6y0bU8yA0LtSu1UVEcIpgtk9IUIRuGuv93ooaexJD0Ov8ejHWBGpGFQOcNfvUXRdWo8mriahcqoCQY47w+fPRBVsaC0sqAYinbC3hsJ0NeyYQfaUHdMenMz3Z/nMN8lMgMplLLiXrHHrYF1thpwxs724l6XIh0Y9VdtceA6y9m4iD36/C/YUMb0S6NBJ+AjHTwaWGQ6cwxYzLsuWHGAp5EMIqZnYImLEFCIe0w2/owIDAQAB"
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArHeYRy/7RAZbpT4hRkYcUWDrwKXYT0hqKBJH9hlcaV9fJT5ANq5EZL76ctpBeWhsyP8niJXB+OUQM9fEVCkIZ9r0gg3usboF5C9zKA8jbcEA6y0bU8yA0LtSu1UVEcIpgtk9IUIRuGuv93ooaexJD0Ov8ejHWBGpGFQOcNfvUXRdWo8mriahcqoCQY47w+fPRBVsaC0sqAYinbC3hsJ0NeyYQfaUHdMenMz3Z/nMN8lMgMplLLiXrHHrYF1thpwxs724l6XIh0Y9VdtceA6y9m4iD36/C/YUMb0S6NBJ+AjHTwaWGQ6cwxYzLsuWHGAp5EMIqZnYImLEFCIe0w2/owIDAQAB",
+  "externally_connectable": {
+    "matches": [
+      "https://yjlee826-rgb.github.io/*"
+    ]
+  }
 }

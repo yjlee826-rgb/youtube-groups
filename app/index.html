@@ -246,7 +246,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23t';
+const VER = '2026-11-23u';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -693,13 +693,17 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------- 동작 ---------- */
 // 휴대폰·태블릿은 주소로 넘기면 유튜브 앱이 열리고, PC는 새 탭으로 엶 (앱 화면이 유튜브로 바뀌어 버리지 않게)
-// 크롬 옆 패널(확장 프로그램) 안에서 열렸으면 옆의 유튜브 탭에서 열도록 패널에 부탁함
-const inPanel = window.top !== window;
-const EXT_LATEST = '1.0.0';   // 확장 프로그램 '틀'의 최신 버전. 틀을 바꿀 때만 올림
+// PC 크롬에 다락 확장 프로그램이 있으면, 누른 유튜브 주소를 열려 있는 유튜브 탭 하나에서 열도록 부탁함 (없으면 새 탭)
+const EXT_ID = 'fpjccfefcfcefhagelabmnkbaohalgdn', EXT_LATEST = '1.1.0';   // 확장 프로그램 '틀'의 최신 버전. 틀을 바꿀 때만 올림
+const hasExt = () => !!globalThis.chrome?.runtime?.sendMessage;
 let extVer = null;
-addEventListener('message', e => { if (inPanel && e.source === parent && e.data?.dl === 'ext') { extVer = e.data.v; if (view.name === 'more') render(); } });
+if (hasExt()) try { chrome.runtime.sendMessage(EXT_ID, { dl: 'ver' }, r => { if (!chrome.runtime.lastError && r?.v) { extVer = r.v; if (view?.name === 'more') render(); } }); } catch {}
 const extOld = () => extVer && extVer.localeCompare(EXT_LATEST, undefined, { numeric: true }) < 0;
-const openUrl = u => { if (inPanel) return parent.postMessage({ dl: 'open', url: u }, '*'); matchMedia('(any-pointer: coarse)').matches ? location.href = u : window.open(u, '_blank'); };
+const openUrl = u => {
+  if (matchMedia('(any-pointer: coarse)').matches) return location.href = u;
+  if (extVer) try { return chrome.runtime.sendMessage(EXT_ID, { dl: 'open', url: u }, r => { if (chrome.runtime.lastError || !r?.ok) window.open(u, '_blank'); }); } catch {}
+  window.open(u, '_blank');
+};
 function openChannel(id) {
   data.seen[id] = Date.now(); save(1); render();
   openUrl(`https://www.youtube.com/channel/${id}/videos`);
@@ -1025,7 +1029,7 @@ function moreBody() {
     <div class="sec"><h2>구독</h2></div>
     ${row('organize', '채널 분류', '채널을 그룹에 넣고 빼기')}${row('review', '구독 관리', '오래 쉰 채널 찾아 구독 해제')}${row('reorder', '그룹 순서', '그룹 목록 순서 바꾸기')}${row('deck', '나란히 보기', '그룹 여러 개를 한 화면에 (태블릿·PC)')}
     <div class="sec"><h2>앱</h2></div>
-    ${extOld() ? row('extupd', '확장 프로그램 새 버전', '눌러서 설치 파일 받기 · 한 번만 바꾸면 됩니다') : ''}${row('theme', '화면 테마', th)}${row('wmfont', '이름 서체', `${wmKey()} · ${WM[wmKey()][0]}`)}${row('login', '로그인 유지', load('rt', null) ? '켜짐' : '꺼짐 · 눌러서 켜기')}${row('restore', '이전 상태로 되돌리기', '그룹이 바뀔 때마다 백업 (최근 20개)')}
+    ${extOld() ? row('extupd', '확장 프로그램 새 버전', '크롬 확장 프로그램 화면에서 다락의 새로고침 버튼을 한 번 눌러 주세요') : ''}${row('theme', '화면 테마', th)}${row('wmfont', '이름 서체', `${wmKey()} · ${WM[wmKey()][0]}`)}${row('login', '로그인 유지', load('rt', null) ? '켜짐' : '꺼짐 · 눌러서 켜기')}${row('restore', '이전 상태로 되돌리기', '그룹이 바뀔 때마다 백업 (최근 20개)')}
     <div class="brand"><img src="../icons/yj-128.png" alt="YJ"><span><b>${BRAND}</b><em class="wm">${APP_NAME}</em></span></div>`;
 }
 function subsView() {
@@ -1238,7 +1242,6 @@ $app.addEventListener('click', e => {
     case 'tab-sub': go({ name: 'subs', wg: view.wg }); break;
     case 'theme': themeDlg(); break;
     case 'wmfont': wmDlg(); break;
-    case 'extupd': window.open('https://github.com/yjlee826-rgb/youtube-groups/archive/refs/heads/main.zip', '_blank'); break;   // 유튜브 주소가 아니라 패널 대신 새 탭으로
     case 'pl': case 'tab-pl': go({ name: 'pl', ps: view.ps }); refreshPls(); break;
     case 'plback': go({ name: 'pl', ps: view.ps }); break;
     case 'pledit': view.edit = !view.edit; tsel.clear(); render(); break;
