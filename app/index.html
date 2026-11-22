@@ -175,7 +175,7 @@ button.sec{width:100%;text-align:left}
 .faces i.on{border-color:var(--gold)}
 .pcard{width:170px}
 @media (min-width:900px){
-  .feed>*{max-width:1200px}
+  .feed>*{max-width:1680px}
   .feed .bar h2{font-size:34px!important;font-weight:800;letter-spacing:-1px}
   .feed .secR{margin-left:0;margin-right:0}
   .feed .sec{padding-left:0;padding-right:0}
@@ -183,8 +183,21 @@ button.sec{width:100%;text-align:left}
   .feed .notice{margin-left:0;margin-right:0;width:100%!important}
   .herobox{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:28px}
   .hero .ht{font-size:22px}
-  .gcards{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+  .gcards{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .gcard{padding:18px 20px;gap:16px}
+  .gtop b{font-size:18px}
+  .faces{min-height:38px}
+  .faces i{width:38px;height:38px;border-radius:19px;margin-left:-9px}
+  .pcard{width:240px}
 }
+.brand{display:flex;align-items:center;gap:12px;padding:36px 18px 22px;color:var(--sub);font-size:12px}
+.brand img{width:40px;height:40px;border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 60%,transparent)}
+.brand span{display:flex;flex-direction:column;gap:2px}
+.brand b{color:var(--dot);font-size:14px;font-weight:700;letter-spacing:.02em}
+.logo-s.seal{border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 60%,transparent)}
+.rbrand{display:flex;align-items:center;gap:12px;padding:0 10px 22px}
+.rbrand img{width:44px;height:44px;border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 70%,transparent)}
+.rbrand span{color:var(--gold);font-size:16px;font-weight:700;letter-spacing:.02em}
 /* 태블릿 */
 .wide{display:none}
 @media (min-width:900px){
@@ -217,8 +230,9 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23i';
+const VER = '2026-11-23k';
 const APP_NAME = '구독 그룹';
+const BRAND = 'House of YJ';
 // 아이폰 홈 화면 앱에서 화면 높이가 상태 표시줄만큼 짧게 잡히는 문제 보정
 const fixH = () => { const st = document.documentElement.style; navigator.standalone && matchMedia('(orientation: portrait)').matches ? st.setProperty('--app-h', screen.height + 'px') : st.removeProperty('--app-h'); };
 fixH(); addEventListener('orientationchange', () => setTimeout(fixH, 300)); addEventListener('resize', fixH);
@@ -864,7 +878,7 @@ const pinIc = '<svg class="pin" viewBox="0 0 24 24"><path d="M15 3l6 6-3 1-4 4 1
 const NAV = [['home', '홈', 'home'], ['subs', '구독', 'sub'], ['pl', '재생목록', 'pl'], ['more', '관리', 'more']];
 const topOf = n => ({ group: 'subs', plv: 'pl', feedall: 'home' }[n] || n);
 const tabbar = () => `<nav class="tabbar">${NAV.map(([k, t, i]) => `<button class="tb ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</nav>`;
-const railNav = () => `<div class="rnav">${NAV.map(([k, t, i]) => `<button class="rn ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</div><div class="rdiv"></div>`;
+const railNav = () => `<div class="rbrand"><img src="../icons/yj-128.png" alt="YJ"><span>${BRAND}</span></div><div class="rnav">${NAV.map(([k, t, i]) => `<button class="rn ${topOf(view.name) === k ? 'on' : ''}" data-act="${k}">${ic[i]}${t}</button>`).join('')}</div><div class="rdiv"></div>`;
 const tabs = t => `<div class="tabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const railTabs = t => `<div class="rtabs"><button class="${t === 'sub' ? 'on' : ''}" data-act="tab-sub">구독</button><button class="${t === 'pl' ? 'on' : ''}" data-act="tab-pl">재생목록</button></div>`;
 const plRow = p => `<button class="item" data-pl="${p.id}"><span class="pthumb" style="background-image:url('${esc(p.thumb)}')"></span><span class="body"><span class="name">${esc(p.title)}</span><span class="vs">${p.count}개</span></span></button>`;
@@ -927,7 +941,7 @@ function plView() {
 }
 const groupCard = g => {
   const l = chOf(g), n = newCount(l), nv = new Set(l.filter(s => isNew(s.id)).map(s => s.id));
-  const faces = [...l].sort((a, b) => (nv.has(b.id) - nv.has(a.id)) || ((latest[b.id]?.t || 0) - (latest[a.id]?.t || 0))).slice(0, 4);
+  const faces = [...l].sort((a, b) => (nv.has(b.id) - nv.has(a.id)) || ((latest[b.id]?.t || 0) - (latest[a.id]?.t || 0))).slice(0, isWide() ? 6 : 4);
   return `<button class="gcard ${n ? 'hot' : ''}" data-g="${g.id}"><span class="gtop"><b>${esc(g.name)}</b>${n ? `<span class="gnew">새 ${n}</span>` : `<span class="gcnt">${l.length}</span>`}</span><span class="faces">${faces.map(s => `<i class="${nv.has(s.id) ? 'on' : ''}" style="background-image:url('${esc(s.thumb)}')"></i>`).join('')}</span></button>`;
 };
 function heroNew(fresh, side) {
@@ -952,7 +966,7 @@ const notices = () => {
 };
 function home() {
   const fresh = freshList(), gs = sortGroups(data.groups);
-  return `<div class="head"><div class="row"><img class="logo-s" src="../icons/icon-192.png" alt=""><h1 style="font-size:24px">${APP_NAME}</h1><button class="ib" data-act="search" aria-label="검색">${ic.find}</button></div><div class="meta">구독 ${subs.length}개 · 그룹 ${data.groups.length}개</div></div>
+  return `<div class="head"><div class="row"><img class="logo-s seal" src="../icons/yj-128.png" alt="YJ"><h1 style="font-size:24px">${APP_NAME}</h1><button class="ib" data-act="search" aria-label="검색">${ic.find}</button></div><div class="meta">구독 ${subs.length}개 · 그룹 ${data.groups.length}개</div></div>
   <div class="main">${homeBody(fresh, gs, 3)}</div>`;
 }
 function feedall() {
@@ -972,7 +986,8 @@ function moreBody() {
     <div class="sec"><h2>구독</h2></div>
     ${row('organize', '채널 분류', '채널을 그룹에 넣고 빼기')}${row('review', '구독 관리', '오래 쉰 채널 찾아 구독 해제')}${row('reorder', '그룹 순서', '그룹 목록 순서 바꾸기')}${row('deck', '나란히 보기', '그룹 여러 개를 한 화면에 (태블릿·PC)')}
     <div class="sec"><h2>앱</h2></div>
-    ${row('theme', '화면 테마', th)}${row('login', '로그인 유지', load('rt', null) ? '켜짐' : '꺼짐 · 눌러서 켜기')}${row('restore', '이전 상태로 되돌리기', '그룹이 바뀔 때마다 백업 (최근 20개)')}`;
+    ${row('theme', '화면 테마', th)}${row('login', '로그인 유지', load('rt', null) ? '켜짐' : '꺼짐 · 눌러서 켜기')}${row('restore', '이전 상태로 되돌리기', '그룹이 바뀔 때마다 백업 (최근 20개)')}
+    <div class="brand"><img src="../icons/yj-128.png" alt="YJ"><span><b>${BRAND}</b>${APP_NAME}</span></div>`;
 }
 function subsView() {
   const un = unsorted();
