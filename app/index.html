@@ -15,9 +15,9 @@
 <title>다락</title>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <style>
-:root{--bg:#14100F;--panel:#1B1413;--card:#261C1B;--ink:#F3ECE4;--sub:#C4B8AE;--line:#3A2C2B;--bur:#6A1022;--gold:#E4C47E;--gold-ink:#2A0A12;--onbur:#EBD3B5;--thumb:#4A3A37;--dot:#E4C47E}
-@media (prefers-color-scheme: light){:root:not([data-theme=dark]){--bg:#F6F1EE;--panel:#EFE6E2;--card:#FFFFFF;--ink:#1A1012;--sub:#5C4A47;--line:#E3D3CF;--thumb:#E8D9D4;--dot:#A87A22}}
-:root[data-theme=light]{--bg:#F6F1EE;--panel:#EFE6E2;--card:#FFFFFF;--ink:#1A1012;--sub:#5C4A47;--line:#E3D3CF;--thumb:#E8D9D4;--dot:#A87A22}
+:root{--bg:#14100F;--panel:#1B1413;--card:#261C1B;--ink:#F3ECE4;--sub:#C4B8AE;--line:#3A2C2B;--bur:#6A1022;--gold:#E4C47E;--gold-ink:#2A0A12;--onbur:#EBD3B5;--thumb:#4A3A37;--dot:#E4C47E;--wm:#E4C47E}
+@media (prefers-color-scheme: light){:root:not([data-theme=dark]){--bg:#F6F1EE;--panel:#EFE6E2;--card:#FFFFFF;--ink:#1A1012;--sub:#5C4A47;--line:#E3D3CF;--thumb:#E8D9D4;--dot:#A87A22;--wm:#8A2A3A}}
+:root[data-theme=light]{--bg:#F6F1EE;--panel:#EFE6E2;--card:#FFFFFF;--ink:#1A1012;--sub:#5C4A47;--line:#E3D3CF;--thumb:#E8D9D4;--dot:#A87A22;--wm:#8A2A3A}
 .relog{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 20px);transform:translateX(-50%);background:var(--gold);color:var(--gold-ink);height:46px;padding:0 20px;border-radius:23px;font-size:15px;font-weight:700;z-index:5;box-shadow:0 4px 16px rgba(0,0,0,.3)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:var(--app-h,100%);background:var(--bg);color:var(--ink);font-family:Pretendard,-apple-system,"Apple SD Gothic Neo",sans-serif;font-size:16px;overscroll-behavior:none}
@@ -199,8 +199,9 @@ button.sec{width:100%;text-align:left}
 .rbrand img{width:44px;height:44px;border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 70%,transparent)}
 .rbrand span{color:var(--gold);font-size:16px;font-weight:700;letter-spacing:.02em}
 @font-face{font-family:'Darak';src:url('../fonts/darak-hunmin.woff') format('woff');font-display:block}
-.wm{font-family:'Darak',serif!important;font-weight:400!important;letter-spacing:.04em!important}
-.feed .bar h2.wm{font-size:42px!important}
+.wm{font-family:'Darak',serif!important;font-weight:400!important;letter-spacing:.04em!important;-webkit-text-stroke:.03em currentColor}
+.feed .bar h2.wm{font-size:54px!important;color:var(--wm)}
+.brand em.wm{color:var(--wm);font-size:18px}
 .brand em{font-style:normal;font-size:15px}
 /* 태블릿 */
 .wide{display:none}
@@ -234,7 +235,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23l';
+const VER = '2026-11-23m';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 // 아이폰 홈 화면 앱에서 화면 높이가 상태 표시줄만큼 짧게 잡히는 문제 보정
@@ -970,7 +971,7 @@ const notices = () => {
 };
 function home() {
   const fresh = freshList(), gs = sortGroups(data.groups);
-  return `<div class="head"><div class="row"><img class="logo-s seal" src="../icons/yj-128.png" alt="YJ"><h1 class="wm" style="font-size:32px">${APP_NAME}</h1><button class="ib" data-act="search" aria-label="검색">${ic.find}</button></div><div class="meta">구독 ${subs.length}개 · 그룹 ${data.groups.length}개</div></div>
+  return `<div class="head"><div class="row"><img class="logo-s seal" src="../icons/yj-128.png" alt="YJ"><h1 class="wm" style="font-size:36px">${APP_NAME}</h1><button class="ib" data-act="search" aria-label="검색">${ic.find}</button></div><div class="meta">구독 ${subs.length}개 · 그룹 ${data.groups.length}개</div></div>
   <div class="main">${homeBody(fresh, gs, 3)}</div>`;
 }
 function feedall() {
