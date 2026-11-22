@@ -660,7 +660,7 @@ function review() {
   return `<div class="head"><div class="row"><button class="ib back" data-act="rvexit" aria-label="뒤로">${ic.back}</button><h1>구독 정리</h1></div>
     <div class="meta">구독 ${subs.length}개 · 오래 쉰 채널부터</div>
     <div class="seg" style="padding:0 0 16px">${segs.map(x => `<button class="pill" data-f="${x[0]}" style="${x[0] === f ? 'background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:700' : ''}">${x[1]}</button>`).join('')}</div></div>
-  <div class="main">${list.map(s => { const sub = isSub(s.id), b = busy.has(s.id); return `<div class="item ${sub ? '' : 'off'}">
+  <div class="main">${list.map(s => { const sub = isSub(s.id), b = busy.has(s.id); return `<div class="item ${sub ? '' : 'off'}" data-ch="${s.id}" style="cursor:pointer">
       <span class="av" style="background-image:url('${esc(s.thumb)}')"></span>
       <span class="body"><span class="name">${esc(s.title)}</span><span class="vs">${lastUp(s.id) ? ago(lastUp(s.id)) : stats[s.id] ? '영상 없음' : ''}${stats[s.id] ? ' · ' + fmtN(stats[s.id].n) : ''}</span></span>
       <button class="tg ${sub ? 'un' : 'keep'}" data-rs="${s.id}" ${b ? 'disabled style="opacity:.5"' : ''}>${b ? '…' : sub ? '구독 해제' : '구독'}</button></div>`; }).join('') || '<div class="center"><span class="vs">해당 채널이 없습니다</span></div>'}</div>`;
