@@ -243,6 +243,11 @@ async function loadSubs() {
     out = out.concat(d.items.map(i => ({ id: i.snippet.resourceId.channelId, sid: i.id, title: i.snippet.title, thumb: i.snippet.thumbnails?.default?.url || '' })));
     page = d.nextPageToken || '';
   } while (page);
+  // 구독 목록의 채널 이름은 영어로 오는 경우가 있어 채널 원래 이름으로 바꿈
+  for (let i = 0; i < out.length; i += 50) {
+    const d = await api('https://www.googleapis.com/youtube/v3/channels?part=snippet&maxResults=50&id=' + out.slice(i, i + 50).map(x => x.id).join(','));
+    (d.items || []).forEach(c => { const x = out.find(o => o.id === c.id); if (x) { x.title = c.snippet.title; x.thumb = c.snippet.thumbnails?.default?.url || x.thumb; } });
+  }
   subs = out; keep('subs', subs);
 }
 async function loadExtra() {
