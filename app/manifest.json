@@ -1,6 +1,6 @@
 {
-  "name": "구독 그룹",
-  "short_name": "구독 그룹",
+  "name": "다락",
+  "short_name": "다락",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
