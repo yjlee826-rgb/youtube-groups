@@ -250,7 +250,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23w';
+const VER = '2026-11-23x';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
 const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
@@ -276,6 +276,7 @@ function checkVer() {
   }).catch(() => {});
 }
 checkVer();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});   // 안드로이드에서 크롬 마크 없는 '설치된 앱'이 되도록
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVer(); });
 const CLIENT_ID = '123904132689-al5msm3lu9itk3hp3q0dap43vka6ejr8.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/drive.appdata';

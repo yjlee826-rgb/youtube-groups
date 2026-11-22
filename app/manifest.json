@@ -10,12 +10,26 @@
     {
       "src": "../icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "../icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "../icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "share_target": {
@@ -25,6 +39,9 @@
       "title": "st",
       "text": "sx",
       "url": "su"
-    }
-  }
+    },
+    "enctype": "application/x-www-form-urlencoded"
+  },
+  "id": "./",
+  "description": "유튜브 구독 채널과 재생목록을 그룹으로 정리하는 개인용 앱"
 }
