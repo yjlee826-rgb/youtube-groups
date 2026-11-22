@@ -198,8 +198,16 @@ button.sec{width:100%;text-align:left}
 .rbrand{display:flex;align-items:center;gap:12px;padding:0 10px 22px}
 .rbrand img{width:44px;height:44px;border-radius:50%;box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 70%,transparent)}
 .rbrand span{color:var(--gold);font-size:16px;font-weight:700;letter-spacing:.02em}
-@font-face{font-family:'Darak';src:url('../fonts/darak-hunmin.woff') format('woff');font-display:block}
-.wm{font-family:'Darak',serif!important;font-weight:400!important;letter-spacing:.04em!important;-webkit-text-stroke:.03em currentColor}
+@font-face{font-family:'DarakA';src:url('../fonts/darak-A.woff2') format('woff2');font-display:block}
+@font-face{font-family:'DarakB';src:url('../fonts/darak-B.woff2') format('woff2');font-display:block}
+@font-face{font-family:'DarakC';src:url('../fonts/darak-C.woff2') format('woff2');font-display:block}
+@font-face{font-family:'DarakD';src:url('../fonts/darak-D.woff2') format('woff2');font-display:block}
+@font-face{font-family:'DarakE';src:url('../fonts/darak-E.woff2') format('woff2');font-display:block}
+@font-face{font-family:'DarakF';src:url('../fonts/darak-F.woff2') format('woff2');font-display:block}
+.wm{font-family:var(--wmf,'DarakA'),serif!important;font-weight:400!important;letter-spacing:.04em!important;-webkit-text-stroke:var(--wms,.03em) currentColor}
+.wopt{display:flex;align-items:center;gap:16px;height:64px}
+.wopt .wm{font-size:30px;width:96px;flex:none}
+.wopt span:last-child{font-size:14px}
 .feed .bar h2.wm{font-size:54px!important;color:var(--wm)}
 .brand em.wm{color:var(--wm);font-size:18px}
 .brand em{font-style:normal;font-size:15px}
@@ -235,9 +243,18 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23m';
+const VER = '2026-11-23n';
 const APP_NAME = '다락';
 const BRAND = 'House of YJ';
+const WM = { A: ['EBS훈민정음', '판본체', '.03em'], B: ['송명', '옛 활자 명조', '0'], C: ['나눔손글씨 붓', '붓글씨', '0'], D: ['연성', '굵은 붓 획', '0'], E: ['산하엽', '붓 맛 바탕', '0'], F: ['능소화', '가는 고전 바탕', '0'] };
+const wmKey = () => WM[data?.wm] ? data.wm : 'A';
+function applyWm() { const k = wmKey(), st = document.documentElement.style; st.setProperty('--wmf', `'Darak${k}'`); st.setProperty('--wms', WM[k][2]); }
+function wmDlg() {
+  const cur = wmKey(), d = document.createElement('div'); d.className = 'dlg';
+  d.innerHTML = `<div class="box"><span class="grab"></span><div class="dtop"><b style="font-size:17px">이름 서체</b><button class="x">닫기</button></div>${Object.entries(WM).map(([k, [n, t, w]]) => `<button class="opt wopt ${k === cur ? 'sel' : ''}" data-v="${k}"><span class="wm" style="--wmf:'Darak${k}';--wms:${w}">${APP_NAME}</span><span>${k} · ${n} · ${t}</span></button>`).join('')}</div>`;
+  document.body.append(d);
+  d.onclick = e => { const b = e.target.closest('[data-v]'); if (b && b.dataset.v !== cur) { data.wm = b.dataset.v; save(2); applyWm(); render(); } d.remove(); };
+}
 // 아이폰 홈 화면 앱에서 화면 높이가 상태 표시줄만큼 짧게 잡히는 문제 보정
 const fixH = () => { const st = document.documentElement.style; navigator.standalone && matchMedia('(orientation: portrait)').matches ? st.setProperty('--app-h', screen.height + 'px') : st.removeProperty('--app-h'); };
 fixH(); addEventListener('orientationchange', () => setTimeout(fixH, 300)); addEventListener('resize', fixH);
@@ -979,8 +996,6 @@ function feedall() {
   <div class="main">${weekFeed(known(), vRow, '<div class="sec"><h2>이전</h2><span class="vs">이번 주에 안 올린 채널</span></div>', '<div class="center"><span class="vs">이번 주에 올라온 영상이 없습니다</span></div>')}</div>`;
 }
 function more() {
-  const row = (act, t, d) => `<button class="item" data-act="${act}"><span class="body"><span class="name">${t}</span><span class="vs">${d}</span></span></button>`;
-  const th = { auto: '기기 설정 따르기', light: '밝게', dark: '어둡게' }[load('theme', 'auto')];
   return `<div class="head"><div class="row"><h1>관리</h1></div><div class="meta">구독 ${subs.length}개 · 그룹 ${data.groups.length}개 · 재생목록 ${pls.length}개</div></div>
   <div class="main">${moreBody()}</div>`;
 }
@@ -991,7 +1006,7 @@ function moreBody() {
     <div class="sec"><h2>구독</h2></div>
     ${row('organize', '채널 분류', '채널을 그룹에 넣고 빼기')}${row('review', '구독 관리', '오래 쉰 채널 찾아 구독 해제')}${row('reorder', '그룹 순서', '그룹 목록 순서 바꾸기')}${row('deck', '나란히 보기', '그룹 여러 개를 한 화면에 (태블릿·PC)')}
     <div class="sec"><h2>앱</h2></div>
-    ${row('theme', '화면 테마', th)}${row('login', '로그인 유지', load('rt', null) ? '켜짐' : '꺼짐 · 눌러서 켜기')}${row('restore', '이전 상태로 되돌리기', '그룹이 바뀔 때마다 백업 (최근 20개)')}
+    ${row('theme', '화면 테마', th)}${row('wmfont', '이름 서체', `${wmKey()} · ${WM[wmKey()][0]}`)}${row('login', '로그인 유지', load('rt', null) ? '켜짐' : '꺼짐 · 눌러서 켜기')}${row('restore', '이전 상태로 되돌리기', '그룹이 바뀔 때마다 백업 (최근 20개)')}
     <div class="brand"><img src="../icons/yj-128.png" alt="YJ"><span><b>${BRAND}</b><em class="wm">${APP_NAME}</em></span></div>`;
 }
 function subsView() {
@@ -1145,6 +1160,7 @@ function render() {
   if (view.name === 'loading') { lastKey = ''; $app.innerHTML = center('<span class="vs">불러오는 중</span>'); return; }
   if (view.name === 'auth') { lastKey = ''; $app.innerHTML = center('<button class="btn p" data-act="login">계속</button>'); return; }
   if (!data) return;
+  applyWm();
   norm(data);
   const narrow = { home, subs: subsView, feedall, more, group: groupView, organize, reorder, review, pl: plView, plv: plvView, search, deck }[view.name]?.() || home();
   const showWide = ['home', 'subs', 'more', 'group', 'pl', 'plv'].includes(view.name);
@@ -1202,6 +1218,7 @@ $app.addEventListener('click', e => {
     case 'reorder': go({ name: 'reorder', from: view.name }); break;
     case 'tab-sub': go({ name: 'subs', wg: view.wg }); break;
     case 'theme': themeDlg(); break;
+    case 'wmfont': wmDlg(); break;
     case 'pl': case 'tab-pl': go({ name: 'pl', ps: view.ps }); if (!pls.length) loadPls().then(render).catch(() => {}); break;
     case 'plback': go({ name: 'pl', ps: view.ps }); break;
     case 'pledit': view.edit = !view.edit; tsel.clear(); render(); break;
