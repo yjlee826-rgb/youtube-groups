@@ -119,6 +119,8 @@ button.sec{width:100%;text-align:left}
 .drow{display:flex;gap:10px;padding:10px 12px;width:100%;text-align:left;-webkit-touch-callout:none;user-select:none}
 .drow .thumb{width:120px;flex:none;border-radius:8px}
 .drow .vt{font-size:14px}.drow .vs{font-size:13px}
+.divi{display:flex;align-items:center;gap:12px;color:var(--sub);font-size:14px;font-weight:600;padding:14px 12px 6px}
+.divi::after{content:'';flex:1;height:1px;background:var(--line)}
 /* 태블릿 */
 .wide{display:none}
 @media (min-width:900px){
@@ -151,7 +153,7 @@ button.sec{width:100%;text-align:left}
 <div class="toast" id="toast"></div>
 <script>
 {
-const VER = '2026-11-23d';
+const VER = '2026-11-23e';
 // 아이폰 홈 화면 앱에서 화면 높이가 상태 표시줄만큼 짧게 잡히는 문제 보정
 const fixH = () => { const st = document.documentElement.style; navigator.standalone && matchMedia('(orientation: portrait)').matches ? st.setProperty('--app-h', screen.height + 'px') : st.removeProperty('--app-h'); };
 fixH(); addEventListener('orientationchange', () => setTimeout(fixH, 300)); addEventListener('resize', fixH);
@@ -227,6 +229,14 @@ const isNewV = (ch, v) => v.t > (data.seen[ch] ?? data.since) && !data.watched[v
 const newVids = id => vidsOf(id).filter(v => isNewV(id, v));
 const isNew = id => newVids(id).length > 0;
 const feedOf = list => list.flatMap(s => vidsOf(s.id).map(v => ({ ...v, ch: s.id, chTitle: s.title }))).sort((a, b) => b.t - a.t);
+// 피드 = 최근 7일 안에 올라온 영상 전부 + '이전' 아래에 이번 주에 안 올린 채널의 가장 최근 영상 1개씩
+const WEEK = 7 * 86400000;
+function weekFeed(list, row, divider, empty) {
+  const all = feedOf(list), cut = Date.now() - WEEK;
+  const week = all.filter(v => v.t >= cut), has = new Set(week.map(v => v.ch));
+  const before = list.filter(s => !has.has(s.id)).map(s => all.find(v => v.ch === s.id)).filter(Boolean).sort((a, b) => b.t - a.t);
+  return (week.map(row).join('') + (before.length ? divider + before.map(row).join('') : '')) || empty;
+}
 const curGroup = () => data.groups.find(x => x.id === (view.name === 'group' ? view.id : view.wg));
 const grouped = () => { const s = new Set(); data.groups.forEach(g => g.ch.forEach(c => s.add(c))); return s; };
 const unsorted = () => { const g = grouped(); return subs.filter(s => !g.has(s.id)); };
@@ -438,11 +448,16 @@ async function loadStats() {
 let quotaHit = 0;
 async function latestOf(id) {
   // UU = 채널의 모든 업로드 (일반 영상·쇼츠·라이브 다시보기). 예정된 프리미어는 뺌
+  // 10개를 받고, 10개가 모두 최근 7일 안이면 다음 쪽을 더 받음 (최대 50개)
   try {
-    const d = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=10&playlistId=UU${id.slice(2)}`);
-    const items = (d.items || []).filter(i => i.contentDetails.videoPublishedAt && Date.parse(i.contentDetails.videoPublishedAt) <= Date.now())
-      .map(i => ({ vid: i.contentDetails.videoId, title: i.snippet.title, thumb: i.snippet.thumbnails?.medium?.url || i.snippet.thumbnails?.default?.url || '', t: Date.parse(i.contentDetails.videoPublishedAt) }))
-      .sort((a, b) => b.t - a.t);
+    let items = [], page = '';
+    do {
+      const d = await api(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=${page ? 20 : 10}&playlistId=UU${id.slice(2)}` + (page ? '&pageToken=' + page : ''));
+      items = items.concat((d.items || []).filter(i => i.contentDetails.videoPublishedAt && Date.parse(i.contentDetails.videoPublishedAt) <= Date.now())
+        .map(i => ({ vid: i.contentDetails.videoId, title: i.snippet.title, thumb: i.snippet.thumbnails?.medium?.url || i.snippet.thumbnails?.default?.url || '', t: Date.parse(i.contentDetails.videoPublishedAt) })));
+      page = d.nextPageToken && items.length < 50 && items.every(v => v.t >= Date.now() - WEEK) ? d.nextPageToken : '';
+    } while (page);
+    items.sort((a, b) => b.t - a.t);
     const f = items[0];
     return f ? { t: f.t, title: f.title, vid: f.vid, thumb: f.thumb, items, at: Date.now() } : { t: 0, items: [], at: Date.now() };
   } catch (e) {
@@ -820,7 +835,7 @@ function groupView() {
   const n = newCount(list), gt = load('gtab', 'ch');
   const seg = [['ch', '채널'], ['v', '영상']].map(x => `<button class="pill" data-gt="${x[0]}" style="${x[0] === gt ? 'background:var(--gold);color:var(--gold-ink);border-color:var(--gold);font-weight:700' : ''}">${x[1]}</button>`).join('');
   const body = gt === 'v'
-    ? (feedOf(list).slice(0, 100).map(vRow).join('') || '<div class="center"><span class="vs">영상이 없습니다</span></div>')
+    ? weekFeed(list, vRow, '<div class="sec"><h2>이전</h2><span class="vs">이번 주에 안 올린 채널</span></div>', '<div class="center"><span class="vs">영상이 없습니다</span></div>')
     : (list.length ? list.map(s => chRow(s)).join('') : '<div class="center"><span class="vs">채널이 없습니다</span></div>') + '<button class="add" data-act="organize-g">채널 넣기 · 빼기</button>';
   return `<div class="head"><div class="row"><button class="ib back" data-act="home" aria-label="뒤로">${ic.back}</button><span style="flex:1"></span>${n ? '<button class="pill" data-act="allseen">모두 확인</button>' : ''}<button class="ib" data-act="gmenu" aria-label="메뉴">${ic.more}</button></div>
     <div class="row"><h1>${esc(g.name)}</h1>${gt === 'ch' ? `<button class="pill" data-act="csort">${label(chSorts, data.sort.channels)}</button>` : ''}</div><div class="meta">채널 ${list.length}개${n ? ' · 새 영상 ' + n + '개' : ''}</div>
@@ -879,7 +894,7 @@ const dRow = v => `<button class="drow ${isNewV(v.ch, v) ? '' : 'seen'}" data-v=
 function deck() {
   const gs = sortGroups(data.groups);
   return `<div class="deck"><div class="head"><div class="row" style="padding-bottom:10px"><h1>나란히 보기</h1><button class="pill" data-act="home">닫기</button></div></div>
-  <div class="cols">${gs.map(g => { const l = chOf(g), n = newCount(l); return `<section class="dcol"><button class="dh" data-g="${g.id}"><span>${esc(g.name)}</span>${n ? `<span class="badge">${n}</span>` : ''}</button><div class="dl">${feedOf(l).slice(0, 40).map(dRow).join('') || '<div class="center"><span class="vs">영상이 없습니다</span></div>'}</div></section>`; }).join('')}</div></div>`;
+  <div class="cols">${gs.map(g => { const l = chOf(g), n = newCount(l); return `<section class="dcol"><button class="dh" data-g="${g.id}"><span>${esc(g.name)}</span>${n ? `<span class="badge">${n}</span>` : ''}</button><div class="dl">${weekFeed(l, dRow, '<div class="divi">이전</div>', '<div class="center"><span class="vs">영상이 없습니다</span></div>')}</div></section>`; }).join('')}</div></div>`;
 }
 function reorder() {
   return `<div class="head"><div class="row"><h1 style="font-size:20px">그룹 순서</h1><button class="pill" data-act="home">완료</button></div><div class="meta"></div></div>
@@ -913,7 +928,6 @@ function wide() {
   if (!view.wg) view.wg = gs[0]?.id || (un.length ? 'un' : null);
   const g = data.groups.find(x => x.id === view.wg);
   const list = view.wg === 'un' ? un : g ? sortChannels(chOf(g), g) : [];
-  const vids = feedOf(list).slice(0, 90);
   const title = view.wg === 'un' ? '미분류' : g ? g.name : '';
   return `<div class="wide">
     <div class="rail">${railTabs('sub')}
@@ -928,7 +942,7 @@ function wide() {
       ${g ? `<button class="pill" data-act="csort">${label(chSorts, data.sort.channels)}</button><button class="pill" data-act="gmenu">그룹 편집</button>` : ''}${newCount(list) ? '<button class="pill" data-act="allseen">모두 확인</button>' : ''}
       <span style="flex:1"></span><button class="pill" data-act="gsort">${label(groupSorts, data.sort.groups)}</button>
       <button class="pill p" data-act="organize-w">정리 모드</button></div>
-      <div class="grid">${vids.map(vCard).join('')}</div></div>
+      <div class="grid">${weekFeed(list, vCard, '<div class="divi" style="grid-column:1/-1">이전 · 이번 주에 안 올린 채널</div>', '')}</div></div>
   </div>`;
 }
 
